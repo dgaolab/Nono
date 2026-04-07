@@ -1,0 +1,33 @@
+{
+  "name": "Cluster 2: HOW (Technical Feasibility)",
+  "description": "Evaluates the experimental approach, methods rigor, and specific aims structure",
+  "mcp_grounding": ["chembl", "clinical-trials"],
+  "mcp_condition": "Only invoke ChEMBL and ClinicalTrials MCPs when the research domain (from input/direction.md) involves drug targets, compounds, or clinical interventions. For computational, ecological, or other non-pharmacological domains, skip these MCPs and evaluate feasibility based on intrinsic method quality, preliminary data, and published literature alone.",
+  "grounding_instructions": "If domain-appropriate: use ChEMBL to verify target druggability and known bioactivity; use ClinicalTrials to check existing trial landscape and identify competitive or complementary studies. Always verify that aims are independent (project survives if one aim fails) and that methods are established or supported by preliminary data.",
+  "criteria": [
+    {
+      "name": "Approach/Methods Review",
+      "description": "Quality of experimental approach evaluation",
+      "weight": 1.2,
+      "scores": {
+        "1": "No approach evaluation; methods not assessed",
+        "2": "Superficial methods review; misses major design issues",
+        "3": "Adequate review; identifies some approach weaknesses",
+        "4": "Good review of approach with attention to controls, statistics, pitfalls",
+        "5": "Comprehensive approach review; ensures feasibility, rigor, alternatives for each aim"
+      }
+    },
+    {
+      "name": "Specific Aims Structure",
+      "description": "Quality of specific aims page evaluation and guidance",
+      "weight": 1.0,
+      "scores": {
+        "1": "No specific aims review provided",
+        "2": "Superficial aims review; structure issues unaddressed",
+        "3": "Adequate review; identifies main aims structure issues",
+        "4": "Good review ensuring aims are testable and independent",
+        "5": "Excellent aims review; complete structure optimization with specific guidance on independence, testability, and logical flow"
+      }
+    }
+  ]
+}

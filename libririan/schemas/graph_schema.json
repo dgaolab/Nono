@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Knowledge Graph Manifest",
+  "description": "Schema for KG manifest.json — the Tier 1 compact index of a knowledge graph",
+  "type": "object",
+  "required": ["kg_name", "topic", "created", "updated", "version", "nodes", "edges", "statistics"],
+  "properties": {
+    "kg_name": {
+      "type": "string",
+      "pattern": "^KG_",
+      "description": "Folder name of the knowledge graph, prefixed with KG_"
+    },
+    "topic": {
+      "type": "string",
+      "description": "Full topic description as provided by the user"
+    },
+    "created": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO date when the KG was first created"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO date of the most recent update"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Incremented on each update"
+    },
+    "schedule": {
+      "type": "object",
+      "description": "Optional: present when a cron job is active for this KG",
+      "properties": {
+        "cron": {
+          "type": "string",
+          "description": "Cron expression for the schedule"
+        },
+        "last_run": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of the last scheduled run"
+        },
+        "trigger_name": {
+          "type": "string",
+          "description": "Name of the Claude Code remote trigger"
+        }
+      },
+      "required": ["cron", "trigger_name"]
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Compact index of all knowledge nodes — summaries and keywords enable RAG subsetting without reading full node files",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "file", "tags", "summary", "keywords", "pubmed_ids", "evaluation_status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^node_\\d+$",
+            "description": "Unique node identifier"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short descriptive title"
+          },
+          "file": {
+            "type": "string",
+            "description": "Relative path to the node markdown file"
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Category and topic tags for filtering"
+          },
+          "summary": {
+            "type": "string",
+            "description": "One-sentence distillation of the knowledge unit"
+          },
+          "keywords": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Search terms for RAG relevance matching"
+          },
+          "pubmed_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of PubMed IDs supporting this node"
+          },
+          "evaluation_status": {
+            "type": "string",
+            "enum": ["passed", "failed", "pending"],
+            "description": "Result of independent reference verification"
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Relationships between nodes",
+      "items": {
+        "type": "object",
+        "required": ["source", "target", "relationship"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Source node ID"
+          },
+          "target": {
+            "type": "string",
+            "description": "Target node ID"
+          },
+          "relationship": {
+            "type": "string",
+            "enum": ["is_part_of", "depends_on", "supports", "contradicts", "related_to", "derived_from", "mechanism_of"],
+            "description": "Type of relationship"
+          }
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "required": ["total_nodes", "total_edges", "total_unique_pmids", "evaluation_passed", "evaluation_failed"],
+      "properties": {
+        "total_nodes": { "type": "integer", "minimum": 0 },
+        "total_edges": { "type": "integer", "minimum": 0 },
+        "total_unique_pmids": { "type": "integer", "minimum": 0 },
+        "evaluation_passed": { "type": "integer", "minimum": 0 },
+        "evaluation_failed": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

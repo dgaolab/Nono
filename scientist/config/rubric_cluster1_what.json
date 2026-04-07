@@ -1,0 +1,44 @@
+{
+  "name": "Cluster 1: WHAT (Conceptual Foundation)",
+  "description": "Evaluates the conceptual core: hypothesis clarity, significance of the problem, and innovation claims",
+  "mcp_grounding": ["pubmed"],
+  "grounding_instructions": "Use PubMed to verify: (1) the stated knowledge gap is genuine and not already addressed by recent publications, (2) significance claims are supported by current literature, (3) innovation claims are not already published. Cite specific PMIDs in your evidence section.",
+  "criteria": [
+    {
+      "name": "Hypothesis Clarity",
+      "description": "Quality of central hypothesis identification and evaluation",
+      "weight": 1.2,
+      "scores": {
+        "1": "Fails to identify or evaluate hypothesis; no guidance provided",
+        "2": "Identifies hypothesis but no evaluation of testability or specificity",
+        "3": "Evaluates hypothesis adequately; some improvement suggestions",
+        "4": "Clear evaluation with specific suggestions for strengthening hypothesis",
+        "5": "Comprehensive hypothesis analysis; ensures testable, specific, falsifiable statement"
+      }
+    },
+    {
+      "name": "Significance and Gap Assessment",
+      "description": "Quality of significance section review and gap identification",
+      "weight": 1.0,
+      "scores": {
+        "1": "No assessment of significance or knowledge gap",
+        "2": "Superficial gap review; misses major significance issues",
+        "3": "Adequate review; identifies gap but limited improvement guidance",
+        "4": "Good gap analysis with clear suggestions for strengthening significance",
+        "5": "Excellent significance review; ensures compelling gap and impact statements"
+      }
+    },
+    {
+      "name": "Innovation Evaluation",
+      "description": "Quality of innovation assessment and specificity",
+      "weight": 1.0,
+      "scores": {
+        "1": "No innovation evaluation provided",
+        "2": "Superficial innovation review; accepts vague claims",
+        "3": "Adequate review; identifies generic innovation claims",
+        "4": "Good review with specific suggestions for concrete innovation claims",
+        "5": "Excellent review; ensures specific, defensible innovation with types identified (conceptual, methodological, application)"
+      }
+    }
+  ]
+}

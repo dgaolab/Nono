@@ -1,0 +1,37 @@
+{
+  "name": "Cluster 3: META (Holistic Reviewer Simulation)",
+  "description": "Simulates real study section review with multi-pass reading and checks cross-cluster coherence",
+  "mcp_grounding": [],
+  "grounding_instructions": "Read Cluster 1 (WHAT) and Cluster 2 (HOW) feedback files for context. Check that weaknesses identified by domain critics have been addressed. Verify internal consistency across the full proposal.",
+  "criteria": [
+    {
+      "name": "Reviewer Perspective",
+      "description": "Application of reviewer mindset and critique anticipation via multi-pass simulation",
+      "weight": 1.0,
+      "review_passes": [
+        "2-minute skim: Read specific aims page only. Can you identify the hypothesis, significance, and innovation within 2 minutes? Is it compelling enough to keep reading?",
+        "15-minute read: Skim all sections. Note weaknesses in logic, feasibility concerns, missing controls, unclear methods. What would you flag as a reviewer?",
+        "Scoring pass: Assign NIH-style criterion scores for Significance, Innovation, Approach, Investigators, Environment. What overall impact score would this receive?"
+      ],
+      "scores": {
+        "1": "No reviewer perspective applied; obvious critique points missed",
+        "2": "Minimal reviewer thinking; misses major potential criticisms",
+        "3": "Some reviewer perspective; anticipates some likely critiques",
+        "4": "Good reviewer simulation; identifies most likely concerns across all three passes",
+        "5": "Excellent reviewer perspective; anticipates and addresses all likely criticisms with specific remediation"
+      }
+    },
+    {
+      "name": "Cross-Cluster Coherence",
+      "description": "Alignment between conceptual foundation (WHAT) and technical approach (HOW)",
+      "weight": 1.0,
+      "scores": {
+        "1": "Major disconnects between hypothesis, methods, and aims; proposal reads as if sections were written independently",
+        "2": "Significant gaps: innovation claims unsupported by methods, or aims don't test the stated hypothesis",
+        "3": "Adequate coherence but some logical gaps remain between what is claimed and what is proposed",
+        "4": "Good coherence: hypothesis, methods, and aims align well with minor inconsistencies",
+        "5": "Excellent coherence: all elements reinforce each other seamlessly; innovation claims are directly supported by the experimental design"
+      }
+    }
+  ]
+}
