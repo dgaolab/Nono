@@ -3,5 +3,7 @@
   "max_iterations": 8,
   "convergence_delta": 0.2,
   "convergence_patience": 2,
-  "adversarial_calibration": "Be adversarial. Score 3 = adequate, not good. Reserve 4-5 for genuinely strong work. A proposal must earn high scores through specific, defensible claims — not vague assertions."
+  "adversarial_calibration": "Be adversarial. Score 3 = adequate, not good. Reserve 4-5 for genuinely strong work. A proposal must earn high scores through specific, defensible claims — not vague assertions.",
+  "input_dir": "input",
+  "output_dir": "output"
 }

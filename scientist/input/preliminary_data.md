@@ -1,5 +1,8 @@
 # Preliminary Data and Insights
 
+<!-- TEMPLATE: Copy this file to your own input directory and fill it in.
+     Then set "input_dir" in config/settings.json to point to that directory. -->
+
 <!-- Optional: provide any preliminary data, figures, pilot results, or insights
      that should inform the proposal. Delete sections that don't apply. -->
 

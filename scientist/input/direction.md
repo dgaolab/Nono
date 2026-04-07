@@ -1,3 +1,6 @@
+<!-- TEMPLATE: Copy this file to your own input directory and fill it in.
+     Then set "input_dir" in config/settings.json to point to that directory. -->
+
 # Research Direction
 
 ## Overall Idea

@@ -14,21 +14,35 @@ This harness takes a research direction (and optional preliminary data) and iter
 
 Before entering the loop, perform these setup steps:
 
-1. **Verify input exists**: Read `input/direction.md`. If it still contains only the template placeholders (e.g., the Overall Idea section starts with `[1-2 paragraphs`), stop and tell the user to fill it in.
-2. **Read settings**: Read `config/settings.json` and store the values:
+1. **Read settings**: Read `config/settings.json` and store the values:
    - `passing_threshold` (default 3.5)
    - `max_iterations` (default 8)
    - `convergence_delta` (default 0.2)
    - `convergence_patience` (default 2)
    - `adversarial_calibration` (calibration instruction for critics)
-3. **Initialize state**: If `state/scoreboard.tsv` does not exist, create it with the header:
+   - `input_dir` (default `input`) — path to the folder containing `direction.md` and optionally `preliminary_data.md`. Can be an absolute path or relative to the project root.
+   - `output_dir` (default `output`) — path to the folder where final outputs will be written. Can be an absolute path or relative to the project root.
+
+   Store `input_dir` and `output_dir` as resolved paths. Use them everywhere below instead of hard-coded `input/` and `output/`.
+
+2. **Resolve input directory**: Let `INPUT` = the value of `input_dir` from settings.
+   - If `INPUT` is a relative path, resolve it relative to the project root.
+   - Verify the directory exists. If not, stop and tell the user: "Input directory `{INPUT}` does not exist. Set `input_dir` in `config/settings.json` to a valid path, or use the default `input/` templates."
+
+3. **Verify input exists**: Read `{INPUT}/direction.md`. If it still contains only the template placeholders (e.g., the Overall Idea section starts with `[1-2 paragraphs`), stop and tell the user to fill it in. (The templates in the default `input/` folder show the expected file structure.)
+
+4. **Resolve output directory**: Let `OUTPUT` = the value of `output_dir` from settings.
+   - If `OUTPUT` is a relative path, resolve it relative to the project root.
+   - If the directory does not exist, create it (including any intermediate directories).
+
+5. **Initialize state**: If `state/scoreboard.tsv` does not exist, create it with the header:
    ```
    iteration	cluster1_score	cluster2_score	meta_score	status	description
    ```
-4. **Determine domain**: Read the `## Domain` section of `input/direction.md`. This determines which MCPs Cluster 2 will use:
+6. **Determine domain**: Read the `## Domain` section of `{INPUT}/direction.md`. This determines which MCPs Cluster 2 will use:
    - If domain mentions drug targets, compounds, therapeutics, clinical interventions, pharmacology, or similar → Cluster 2 uses ChEMBL + ClinicalTrials
    - Otherwise → Cluster 2 skips ChEMBL/ClinicalTrials and evaluates feasibility from methods quality and literature alone
-5. **Read preliminary data**: If `input/preliminary_data.md` exists and is not just the template, read it for use in initial generation.
+7. **Read preliminary data**: If `{INPUT}/preliminary_data.md` exists and is not just the template, read it for use in initial generation.
 
 Once setup is complete, enter the loop.
 
@@ -47,7 +61,7 @@ LOOP from iteration 0 to `max_iterations - 1`:
 
 ### Step 1a: Initial Generation (iteration 0 only)
 
-Generate the first proposal draft from `input/direction.md` (and `input/preliminary_data.md` if available).
+Generate the first proposal draft from `{INPUT}/direction.md` (and `{INPUT}/preliminary_data.md` if available).
 
 Structure the proposal using this template:
 
@@ -146,7 +160,7 @@ You are the HOW Critic — an adversarial evaluator of the technical feasibility
 1. Read the proposal: state/proposals/v{NNN}.md
 2. Read the rubric: config/rubric_cluster2_how.json
 3. Read the settings: config/settings.json — use the adversarial_calibration instruction
-4. Read the domain from input/direction.md:
+4. Read the domain from {INPUT}/direction.md:
    - If the domain involves drug targets, compounds, or clinical interventions:
      Use ChEMBL to check target druggability and known bioactivity.
      Use ClinicalTrials to check existing trial landscape and competitive studies.
@@ -274,8 +288,8 @@ This is where you (the main orchestrator agent) revise the proposal.
 ### Step 6: Finalize
 
 1. Identify the best proposal version: the one with the highest combined score (c1 + c2 + meta) in scoreboard.tsv. If meta_score is "-" for some iterations, use c1 + c2 only for comparison.
-2. Copy the best proposal to `output/final_proposal.md`.
-3. Generate `output/evolution_report.md` with:
+2. Copy the best proposal to `{OUTPUT}/final_proposal.md`.
+3. Generate `{OUTPUT}/evolution_report.md` with:
    ```
    # Evolution Report
 
@@ -311,7 +325,7 @@ If a critic sub-agent fails (returns an error or produces malformed output):
 
 ## Important Notes
 
-- **Do NOT modify** any files in `config/` or `input/` during the loop.
+- **Do NOT modify** any files in `config/` or `{INPUT}/` during the loop.
 - **Do NOT skip iterations** — every iteration must produce feedback files and update the scoreboard.
 - **Do NOT inflate scores** — read and apply the `adversarial_calibration` instruction from settings.json in every critic prompt.
-- All file paths are relative to the `research-improver/` project root.
+- All file paths are relative to the project root, except `input_dir` and `output_dir` which may be absolute paths as configured in `config/settings.json`.
