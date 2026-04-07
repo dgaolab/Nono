@@ -9,12 +9,14 @@ Parse `$ARGUMENTS` for:
 - **--source <folder>** (optional): Path to a folder containing source materials (markdown, text, PDF files) to incorporate.
 - **--output <name>** (optional): Name for the output KG folder.
 - **--since <date>** (optional): Only search PubMed for articles added on or after this date. Format: `YYYY-MM-DD`. Defaults: in BUILD mode, 5 years before today's date; in UPDATE mode, auto-derived from `manifest.json` (see Phase 0).
+- **--depth <narrow|medium|broad>** (optional): Override the automatic topic breadth tier classification in Phase 1b Step 0. Use this to force a specific search scale regardless of topic complexity.
 
 Example invocations:
 ```
 /build-kg "CRISPR gene therapy"
 /build-kg "mRNA vaccine mechanisms" --source ./papers --output KG_mRNA_Vaccines
 /build-kg "mRNA vaccine mechanisms" --output KG_mRNA_Vaccines --since 2026-03-01
+/build-kg "sodium channels" --depth broad
 ```
 
 If no arguments are provided, ask the user for a topic.
@@ -54,11 +56,23 @@ Convert the resolved date to `YYYY/MM/DD` format and store as `since_date` for u
 3. For each file, extract key claims, findings, data points, and any citation information.
 4. Maintain a working list of "raw knowledge fragments" — each fragment is a claim + its source file.
 
+### 1a-bis. Source routing (always performed)
+
+Classify the topic to determine which data sources to query beyond PubMed. Evaluate the topic against these signals:
+
+| Signal in topic | Additional source | MCP tools |
+|-----------------|-------------------|-----------|
+| Therapy, treatment, intervention, clinical, trial, phase I/II/III, drug + disease combination | **ClinicalTrials.gov** | `search_trials`, `get_trial_details`, `search_by_sponsor`, `analyze_endpoints` |
+| Drug name, compound, inhibitor, agonist, antagonist, pharmacology, ADMET, IC50, binding affinity | **ChEMBL** | `compound_search`, `target_search`, `get_bioactivity`, `get_mechanism`, `drug_search`, `get_admet` |
+| Basic science, mechanism, pathway, genetics only | None | PubMed alone suffices |
+
+A topic can activate both additional sources. Store the result as `active_sources` (always includes `"pubmed"`; conditionally includes `"clinicaltrials"` and/or `"chembl"`). If `--source` was provided, also include `"user_provided"`. Record `active_sources` in `manifest.json` under the `data_sources` field.
+
 ### 1b. PubMed research (always performed)
 
 **Step 0 — Assess topic breadth and set search scale:**
 
-Classify the topic into one of three tiers based on how many distinct sub-fields or facets it spans:
+If `--depth` was provided, use that tier directly and skip the classification below. Otherwise, classify the topic into one of three tiers based on how many distinct sub-fields or facets it spans:
 
 | Tier | Criteria | Sub-queries | `max_results` per query | Metadata retrieval | Full-text retrieval | Related-article seeds |
 |------|----------|-------------|------------------------|--------------------|---------------------|-----------------------|
@@ -77,6 +91,8 @@ Use your judgment. When in doubt, prefer the tier above (broader) to avoid missi
 **Step 3** — Collect all returned PMIDs and deduplicate.
 
 **Step 4** — For the top N most relevant PMIDs (per tier), call `mcp__claude_ai_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
+
+**Step 4b — Cache metadata.** Retain all metadata retrieved in this step as a working mapping of `PMID → {title, abstract, authors, journal, year, publication_type}`. This cache persists through Phases 2-3 and is used by Phase 3 Step E1 to avoid redundant API calls.
 
 **Step 5** — For the most important articles (count per tier; those most central to the topic), call `mcp__claude_ai_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
 
@@ -114,7 +130,28 @@ Record these as the gap-fill focus areas.
 
 **Step 7: Related articles.** Call `find_related_articles` on the top seed PMIDs from **both** tracks (count per tier) to discover additional literature.
 
-#### Common rules (both modes):
+### 1c. ClinicalTrials.gov research (if `"clinicaltrials"` in `active_sources`)
+
+**Step 8** — Search ClinicalTrials.gov for trials relevant to the topic:
+
+1. Call `mcp__plugin_clinical-trials_ClinicalTrials__search_trials` with the topic as condition and/or intervention. Use status filters appropriate to the query (e.g., include completed and recruiting trials).
+2. For the top results (Narrow: 3, Medium: 5, Broad: 8), call `mcp__plugin_clinical-trials_ClinicalTrials__get_trial_details` to retrieve protocol details, endpoints, enrollment, and status.
+3. If analyzing a competitive landscape, call `mcp__plugin_clinical-trials_ClinicalTrials__search_by_sponsor` for the key sponsors identified.
+4. If comparing endpoint designs across similar trials, call `mcp__plugin_clinical-trials_ClinicalTrials__analyze_endpoints`.
+5. Extract key knowledge fragments: trial phase, status, primary/secondary endpoints, enrollment numbers, sponsor, intervention details. Store NCT IDs alongside each fragment.
+
+### 1d. ChEMBL research (if `"chembl"` in `active_sources`)
+
+**Step 9** — Search ChEMBL for compound/target data relevant to the topic:
+
+1. Identify drug, compound, or target names from the topic string or from PubMed results gathered in Phase 1b.
+2. Call `mcp__plugin_chembl_ChEMBL__compound_search` for compound names or `mcp__plugin_chembl_ChEMBL__target_search` for protein/gene targets as appropriate.
+3. For top hits, call `mcp__plugin_chembl_ChEMBL__get_mechanism` to understand mechanism of action and `mcp__plugin_chembl_ChEMBL__get_bioactivity` for quantitative binding/activity data (IC50, EC50, Ki).
+4. If pharmacokinetic properties are relevant to the topic, call `mcp__plugin_chembl_ChEMBL__get_admet`.
+5. For approved drug landscapes, call `mcp__plugin_chembl_ChEMBL__drug_search` with the disease/indication.
+6. Extract key knowledge fragments: compound structures, target interactions, activity values, mechanism of action, ADMET properties. Store ChEMBL IDs alongside each fragment.
+
+#### Common rules (all source phases):
 
 **Important**: Batch your MCP calls efficiently. Do not fire more than 5 calls in parallel to avoid rate limiting.
 
@@ -140,7 +177,37 @@ Record these as the gap-fill focus areas.
      - `related_to` — general thematic connection
      - `derived_from` — one finding leads to another
      - `mechanism_of` — describes how something in another node works
-4. **Assign PubMed references**: For each node, identify which PMIDs from the gathered material support it. **Every node MUST have at least one PMID.** For each PMID on a node, write a specific `supports` statement describing what that article contributes to this node's claim.
+   - **Controversy tracking**: When you identify a `contradicts` relationship between two nodes, add a `> [!debate]` callout to both nodes' Detail sections summarizing the conflict: what each side claims, which evidence supports each position, and whether there is a current resolution or consensus.
+3b. **Entity extraction and normalization.** For each node, extract biomedical entities from the title, summary, and detail text. Normalize them using established identifiers:
+
+   | Entity type | Normalization rule | Example |
+   |-------------|-------------------|---------|
+   | Gene | Official HGNC symbol. Map aliases (e.g., "Nav1.1" → SCN1A, "sodium channel alpha 1" → SCN1A) | SCN1A (HGNC:10585) |
+   | Variant | HGVS notation where possible | p.Arg1648His |
+   | Phenotype | HPO term if recognizable (e.g., "seizures" → HP:0001250) | HP:0001250 |
+   | Drug | INN (international nonproprietary name) | valproic acid |
+   | Pathway | Common name + KEGG ID if known | mTOR signaling (hsa04150) |
+   | Protein | UniProt entry name if known | SCN1A_HUMAN |
+   | Disease | OMIM or Orphanet ID if recognizable | Dravet syndrome (OMIM:607208) |
+
+   Store in the node frontmatter `entities` array. This is best-effort — apply your biomedical knowledge to normalize, but prefix uncertain normalizations with `?` on the `normalized_id` (e.g., `"?HGNC:12345"`). Entities enable cross-KG linking (Phase F) and structured queries.
+
+4. **Assign references**: For each node, identify which PMIDs, NCT IDs, and/or ChEMBL IDs from the gathered material support it. **Every node MUST have at least one verifiable reference** (PMID, NCT ID, or ChEMBL ID). Prefer PubMed-backed nodes when possible — nodes backed exclusively by ClinicalTrials.gov or ChEMBL data are valid but should be the exception. For each reference on a node, write a specific `supports` statement describing what it contributes to this node's claim.
+
+4b. **Evidence tier classification.** For each PMID assigned to a node, classify it into an evidence tier based on metadata from the Phase 1 cache (article type, title keywords, publication type):
+
+   | Tier | Label | Score | Indicators in title or publication type |
+   |------|-------|-------|-----------------------------------------|
+   | 1 | `meta_analysis` | 7 | "meta-analysis", "systematic review" |
+   | 2 | `rct` | 6 | "randomized", "RCT", "clinical trial", "controlled trial" |
+   | 3 | `cohort` | 5 | "cohort", "longitudinal", "prospective", "retrospective" |
+   | 4 | `case_series` | 4 | "case series", reports on N > 2 patients |
+   | 5 | `case_report` | 3 | "case report" |
+   | 6 | `review` | 2 | "review" in publication type (not systematic) |
+   | 7 | `opinion` | 1 | "editorial", "letter", "comment", "opinion", "perspective" |
+
+   If none of the indicators match, assign `unclassified`. Store the per-PMID tier in the node frontmatter (`evidence_tier` field on each PMID entry). Assign each node a top-level `evidence_tier` equal to the highest-scoring tier among its PMIDs. Update manifest `statistics.evidence_tier_distribution` with node counts per tier.
+
 5. **Write node files**: For each node, create a `.md` file in the `nodes/` subdirectory following this format:
 
 ```yaml
@@ -148,10 +215,26 @@ Record these as the gap-fill focus areas.
 id: "node_001"
 title: "Short descriptive title"
 tags: ["category", "subcategory"]
+evidence_tier: "rct"
 pubmed_ids:
   - pmid: "XXXXXXXX"
     supports: "What this article contributes to this claim"
     verified: false
+    evidence_tier: "rct"
+external_ids:
+  - source: "clinicaltrials"
+    id: "NCT04000000"
+    supports: "Phase III trial showing 40% response rate"
+  - source: "chembl"
+    id: "CHEMBL25"
+    supports: "IC50 = 3.2 nM against target X"
+entities:
+  - name: "SCN1A"
+    type: "gene"
+    normalized_id: "HGNC:10585"
+  - name: "Dravet syndrome"
+    type: "disease"
+    normalized_id: "OMIM:607208"
 related_nodes: ["node_002", "node_005"]
 relationships:
   node_002: "depends_on"
@@ -170,16 +253,30 @@ One paragraph distillation.
 Longer explanation with nuance.
 
 ## Evidence
-- **PMID XXXXXXXX** (Author et al., Year, *Journal*): Specific finding.
+
+### Literature
+- **PMID XXXXXXXX** (Author et al., Year, *Journal*) `[rct]`: Specific finding.
+
+### Clinical Trials
+- **NCT04000000** (Phase III, Recruiting): Primary endpoint description.
+
+### Compound Data
+- **CHEMBL25** (Aspirin): IC50 = 3.2 nM against COX-2.
 
 ## Related Concepts
 - [[node_002_name]] (depends on)
 - [[node_005_name]] (supports)
 ```
 
+Omit the "Clinical Trials" and "Compound Data" subsections if the node has no references of that type.
+
 6. **Write manifest.json**: Create the Tier 1 index with all nodes, edges, summaries, keywords, and statistics. Follow the schema at `schemas/graph_schema.json`. The `summary` field should be exactly one sentence. The `keywords` field should contain 3-8 search terms that would help match this node to future queries.
 
-7. **Write _index.md**: Create the Obsidian-compatible overview with `[[wikilinks]]` to all nodes, organized by category, with a mermaid graph diagram showing the relationships.
+7. **Write _index.md**: Create the Obsidian-compatible overview with `[[wikilinks]]` to all nodes, organized by category, with a mermaid graph diagram showing the relationships. Apply these mermaid scaling rules:
+   - **< 30 nodes**: Use a single flat `graph TD` diagram.
+   - **30-50 nodes**: Use `subgraph` blocks grouped by primary tag/category. Show intra-category edges within each subgraph and inter-category edges between subgraphs.
+   - **50+ nodes**: Render a category-level overview diagram (each category as a single box with node count) plus per-category detail diagrams inside collapsible `<details>` sections.
+   See `templates/index_template.md` for examples of each format.
 
 ### If UPDATE mode:
 
@@ -203,73 +300,76 @@ Longer explanation with nuance.
 
 Track which nodes are "newly added or modified" — these go to Phase 3.
 
+7. **Maintain changelog buffer** (UPDATE mode only): Throughout this phase, track all changes in a working buffer:
+   - Nodes created (ID, title)
+   - Nodes modified (ID, what changed: new PMIDs, revised text, new external IDs)
+   - References added (PMID/NCT/ChEMBL ID → which nodes)
+   - References failed/removed during evaluation
+   This buffer will be used in Phase 4 to generate `_changelog.md`.
+
 ---
 
 ## Phase 3: Evaluation (Independent Verification)
 
-**Critical**: This phase is a separate logical pass. Approach each node **as a skeptical fact-checker**, not as the author. You are verifying, not defending.
+**Critical**: This phase MUST be executed by an **independent agent with a forked context** — NOT by you (the builder agent). The evaluator has zero knowledge of how the nodes were constructed (no search queries, no reasoning, no construction decisions), eliminating confirmation bias. This is the equivalent of blind peer review.
 
-For each newly added or modified node:
+The evaluation logic lives in a dedicated skill at `.claude/commands/evaluate-kg.md`, which declares `context: fork` in its frontmatter. This guarantees a completely fresh context window with no conversation history from Phases 1-2.
 
-### Step E1: PMID Existence Check
-- For each PMID in the node's frontmatter, call `mcp__claude_ai_PubMed__get_article_metadata` with that PMID.
-- If the API returns valid metadata, the PMID exists. Record the article title and abstract.
-- If it returns an error or empty result, the PMID is invalid — flag it.
+### Launching the evaluator
 
-### Step E2: Content Support Verification
-- For each valid PMID, compare the node's knowledge claim against the article's abstract (and full text if available).
-- Ask yourself:
-  1. Does this article actually discuss the topic claimed?
-  2. Do the article's findings/conclusions support (not contradict) the specific claim made in the node?
-  3. Is the claim a fair representation of what the article says (not cherry-picked or distorted)?
-- Assign a verdict per PMID: `supported`, `partially_supported`, `not_supported`, `unrelated`.
+Invoke the `/evaluate-kg` skill with the appropriate arguments:
 
-### Step E3: Node-Level Verdict
-- A node **passes** if at least one PMID is rated `supported` or `partially_supported`.
-- A node **fails** if all PMIDs are `not_supported` or `unrelated`.
-- If only `partially_supported`, add a note suggesting the claim be narrowed.
-
-### Step E4: Remediation
-- For failed nodes: search PubMed again with the node's specific claim as the query.
-- If a better-matching article is found, substitute the PMID, update the node file, and re-verify.
-- If remediation fails, mark `evaluation_status: "failed"` and add a `> [!warning]` callout in the markdown body explaining the issue.
-
-### Step E5: Write Evaluation Log
-Write `_evaluation_log.json` to the KG folder:
-
-```json
-[
-  {
-    "node_id": "node_005",
-    "timestamp": "2026-04-06T14:30:00Z",
-    "pmid_checks": [
-      {
-        "pmid": "35486828",
-        "exists": true,
-        "article_title": "...",
-        "verdict": "supported",
-        "reasoning": "The abstract states X, which directly supports the node's claim about X."
-      }
-    ],
-    "overall_status": "passed",
-    "notes": ""
-  }
-]
+```
+/evaluate-kg --kg {KG_FOLDER} --nodes {COMMA_SEPARATED_NODE_IDS} --sources {COMMA_SEPARATED_ACTIVE_SOURCES}
 ```
 
-### Step E6: Update Node Files
-- Set `verified: true/false` on each PMID entry in the frontmatter.
-- Set `evaluation_status` to `passed` or `failed`.
-- Update `manifest.json` statistics: `evaluation_passed` and `evaluation_failed` counts.
+Where:
+- `{KG_FOLDER}` = the target KG folder path (e.g., `KG_SCN1A_Epilepsy`)
+- `{COMMA_SEPARATED_NODE_IDS}` = all newly added or modified node IDs (e.g., `node_001,node_005,node_012`)
+- `{COMMA_SEPARATED_ACTIVE_SOURCES}` = the `active_sources` list from Phase 1 (e.g., `pubmed,clinicaltrials,chembl`)
+
+**Do NOT pass any other context to the evaluator** — no search queries, no reasoning about why nodes were constructed a certain way, no hints about expected outcomes. The evaluator reads node files from disk and verifies independently.
+
+### After the evaluator completes
+
+1. Read the `_evaluation_log.json` written by the evaluator.
+2. Read any node files that were modified (remediated or marked as failed).
+3. Verify the `manifest.json` statistics were updated correctly. If not, update them.
+4. Report the evaluation results to the user before proceeding to Phase 4.
 
 ---
 
 ## Phase 4: Output
 
+0. **(UPDATE mode only) Generate `_changelog.md`**: Using the changelog buffer from Phase 2, create or prepend to `_changelog.md` in the KG folder. Each update adds a new section at the top (reverse chronological):
+
+```markdown
+## Update v{version} — {date}
+
+### New Nodes
+- [[node_016_new_concept]] — "Short description"
+
+### Revised Nodes
+- [[node_003_existing]] — Added 2 new PMIDs, updated Detail section
+
+### New References
+- PMID 39876543 (added to node_003, node_016)
+- NCT05123456 (added to node_016)
+
+### Failed/Removed References
+- PMID 00000001 (node_005) — verification failed, replaced with PMID 39876544
+
+### Evaluation Summary
+- 3 nodes evaluated: 2 passed, 1 failed
+```
+
+In BUILD mode, do not generate a changelog.
+
 1. Ensure all files are written to the target KG folder:
    - `manifest.json` — complete and up-to-date
    - `_index.md` — Obsidian-compatible with wikilinks and mermaid diagram
    - `_evaluation_log.json` — full verification audit trail
+   - `_changelog.md` — update history (UPDATE mode only)
    - `nodes/*.md` — all node files
 
 2. Print a terminal summary:
@@ -288,11 +388,11 @@ Warnings: [list any failed nodes or issues]
 
 ## Important Rules
 
-1. **Every node MUST have at least one PubMed ID.** No exceptions. If you cannot find a supporting PMID for a piece of knowledge, do not create a node for it.
+1. **Every node MUST have at least one verifiable reference** (PubMed ID, NCT ID, or ChEMBL ID). No exceptions. If you cannot find a supporting reference for a piece of knowledge, do not create a node for it. Prefer PubMed-backed nodes when possible.
 2. **The evaluation phase is mandatory.** Never skip it. Every new or modified node must be independently verified.
 3. **manifest.json is the source of truth.** It must always be consistent with the node files. The `_index.md` is a human-readable view derived from it.
 4. **Use today's date** for `created` and `updated` fields.
 5. **Node IDs are sequential**: `node_001`, `node_002`, etc. When updating, continue from the highest existing ID.
 6. **File names**: `node_001_short_slug.md` where `short_slug` is a 2-4 word snake_case slug derived from the title.
 7. **Wikilinks**: Use `[[filename_without_extension]]` format in `_index.md` and in node files' Related Concepts sections.
-8. **Do not hallucinate PMIDs.** Only use PMIDs returned by PubMed MCP tools. Never invent or guess a PMID.
+8. **Do not hallucinate reference IDs.** Only use PMIDs returned by PubMed MCP tools, NCT IDs returned by ClinicalTrials.gov MCP tools, and ChEMBL IDs returned by ChEMBL MCP tools. Never invent or guess any reference identifier.

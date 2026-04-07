@@ -29,6 +29,11 @@
       "minimum": 1,
       "description": "Incremented on each update"
     },
+    "data_sources": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["pubmed", "clinicaltrials", "chembl", "user_provided"] },
+      "description": "Data sources used in building this KG"
+    },
     "schedule": {
       "type": "object",
       "description": "Optional: present when a cron job is active for this KG",
@@ -92,6 +97,53 @@
             "type": "string",
             "enum": ["passed", "failed", "pending"],
             "description": "Result of independent reference verification"
+          },
+          "evidence_tier": {
+            "type": "string",
+            "enum": ["meta_analysis", "rct", "cohort", "case_series", "case_report", "review", "opinion", "unclassified"],
+            "description": "Highest evidence tier among this node's supporting references"
+          },
+          "entities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "type"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Display name of the entity"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["gene", "variant", "phenotype", "drug", "pathway", "protein", "disease"],
+                  "description": "Entity type"
+                },
+                "normalized_id": {
+                  "type": "string",
+                  "description": "Canonical identifier (HGNC symbol, HPO ID, OMIM ID, KEGG pathway, etc.)"
+                }
+              }
+            },
+            "description": "Normalized biomedical entities mentioned in this node"
+          },
+          "external_ids": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["source", "id"],
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": ["clinicaltrials", "chembl"],
+                  "description": "External data source"
+                },
+                "id": {
+                  "type": "string",
+                  "description": "Source-specific identifier (NCT ID, ChEMBL ID)"
+                }
+              }
+            },
+            "description": "Non-PubMed external reference identifiers"
           }
         }
       }
@@ -119,6 +171,38 @@
         }
       }
     },
+    "cross_kg_edges": {
+      "type": "array",
+      "description": "Bidirectional links to nodes in other knowledge graphs",
+      "items": {
+        "type": "object",
+        "required": ["local_node", "remote_kg", "remote_node", "relationship"],
+        "properties": {
+          "local_node": {
+            "type": "string",
+            "description": "Node ID in this KG"
+          },
+          "remote_kg": {
+            "type": "string",
+            "description": "Folder name of the remote KG"
+          },
+          "remote_node": {
+            "type": "string",
+            "description": "Node ID in the remote KG"
+          },
+          "relationship": {
+            "type": "string",
+            "enum": ["cross_kg_shared_evidence", "cross_kg_shared_entity", "cross_kg_related"],
+            "description": "Type of cross-KG relationship"
+          },
+          "shared_refs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Shared PMIDs, NCT IDs, or entity IDs that link these nodes"
+          }
+        }
+      }
+    },
     "statistics": {
       "type": "object",
       "required": ["total_nodes", "total_edges", "total_unique_pmids", "evaluation_passed", "evaluation_failed"],
@@ -127,7 +211,14 @@
         "total_edges": { "type": "integer", "minimum": 0 },
         "total_unique_pmids": { "type": "integer", "minimum": 0 },
         "evaluation_passed": { "type": "integer", "minimum": 0 },
-        "evaluation_failed": { "type": "integer", "minimum": 0 }
+        "evaluation_failed": { "type": "integer", "minimum": 0 },
+        "evidence_tier_distribution": {
+          "type": "object",
+          "description": "Count of nodes per evidence tier",
+          "additionalProperties": { "type": "integer" }
+        },
+        "total_nct_ids": { "type": "integer", "minimum": 0 },
+        "total_chembl_ids": { "type": "integer", "minimum": 0 }
       }
     }
   }

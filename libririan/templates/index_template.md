@@ -28,8 +28,43 @@ Brief 2-3 sentence summary of what this knowledge graph covers and its scope.
 
 ## Graph Structure
 
+<!-- For small graphs (<30 nodes), use a flat diagram: -->
 ```mermaid
 graph TD
     node_001[Concept A] -->|is_part_of| node_003[Concept C]
     node_002[Concept B] -->|supports| node_001[Concept A]
 ```
+
+<!-- For medium graphs (30-50 nodes), use subgraph clusters grouped by primary tag: -->
+<!--
+```mermaid
+graph TD
+    subgraph Category1["Category 1"]
+        node_001[Concept A]
+        node_002[Concept B]
+    end
+    subgraph Category2["Category 2"]
+        node_003[Concept C]
+        node_004[Concept D]
+    end
+    node_001 -->|is_part_of| node_003
+    node_002 -->|supports| node_001
+```
+-->
+
+<!-- For large graphs (50+ nodes), use a category-level overview diagram plus per-category detail diagrams in collapsible sections: -->
+<!--
+```mermaid
+graph TD
+    Cat1["Category 1 (5 nodes)"] -->|cross-category| Cat2["Category 2 (8 nodes)"]
+```
+
+<details><summary>Category 1 detail</summary>
+
+```mermaid
+graph TD
+    node_001[Concept A] -->|supports| node_002[Concept B]
+```
+
+</details>
+-->
