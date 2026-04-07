@@ -8,11 +8,13 @@ Parse `$ARGUMENTS` for:
 - **topic** (required): The research topic to build a KG for. This is the first positional argument.
 - **--source <folder>** (optional): Path to a folder containing source materials (markdown, text, PDF files) to incorporate.
 - **--output <name>** (optional): Name for the output KG folder.
+- **--since <date>** (optional): Only search PubMed for articles added on or after this date. Format: `YYYY-MM-DD`. Defaults: in BUILD mode, 5 years before today's date; in UPDATE mode, auto-derived from `manifest.json` (see Phase 0).
 
 Example invocations:
 ```
 /build-kg "CRISPR gene therapy"
 /build-kg "mRNA vaccine mechanisms" --source ./papers --output KG_mRNA_Vaccines
+/build-kg "mRNA vaccine mechanisms" --output KG_mRNA_Vaccines --since 2026-03-01
 ```
 
 If no arguments are provided, ask the user for a topic.
@@ -34,6 +36,14 @@ If no arguments are provided, ask the user for a topic.
 
 Report to the user: "Mode: BUILD — creating KG_TopicName/" or "Mode: UPDATE — loading existing KG_TopicName/ (version N, M existing nodes)".
 
+### Resolve `since_date` (both modes)
+
+If `--since` was explicitly provided, use that value. Otherwise:
+- **BUILD mode**: Default to 5 years before today's date (e.g., if today is 2026-04-07, use 2021-04-07).
+- **UPDATE mode**: Derived later in the UPDATE steps (from `schedule.last_run` or `updated` — see Phase 2).
+
+Convert the resolved date to `YYYY/MM/DD` format and store as `since_date` for use in Phase 1b.
+
 ---
 
 ## Phase 1: Source Gathering
@@ -45,12 +55,66 @@ Report to the user: "Mode: BUILD — creating KG_TopicName/" or "Mode: UPDATE �
 4. Maintain a working list of "raw knowledge fragments" — each fragment is a claim + its source file.
 
 ### 1b. PubMed research (always performed)
-1. Break the user's topic into 3-5 search sub-queries that cover different facets of the topic. For example, for "mRNA vaccine mechanisms": "mRNA vaccine immune response", "lipid nanoparticle mRNA delivery", "mRNA vaccine spike protein translation", "mRNA vaccine adjuvant innate immunity".
-2. For each sub-query, call `mcp__claude_ai_PubMed__search_articles` with appropriate parameters and `max_results: 20`, sorted by relevance.
-3. Collect all returned PMIDs and deduplicate.
-4. For the top 15-20 most relevant PMIDs, call `mcp__claude_ai_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
-5. For the most important 5-8 articles (those most central to the topic), call `mcp__claude_ai_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
-6. Optionally call `mcp__claude_ai_PubMed__find_related_articles` on the 3-5 most central PMIDs to discover additional relevant literature not found in the initial search.
+
+**Step 0 — Assess topic breadth and set search scale:**
+
+Classify the topic into one of three tiers based on how many distinct sub-fields or facets it spans:
+
+| Tier | Criteria | Sub-queries | `max_results` per query | Metadata retrieval | Full-text retrieval | Related-article seeds |
+|------|----------|-------------|------------------------|--------------------|---------------------|-----------------------|
+| **Narrow** | Single mechanism, pathway, or specific intervention (e.g., "PCSK9 inhibitor LDL lowering") | 2-3 | 10 | Top 10-15 | 3-5 | 2-3 |
+| **Medium** | A well-defined topic with several facets (e.g., "mRNA vaccine mechanisms") | 3-5 | 20 | Top 15-25 | 5-8 | 3-5 |
+| **Broad** | A multi-disciplinary area or survey-level topic (e.g., "CRISPR therapeutic applications") | 5-7 | 30 | Top 25-40 | 8-12 | 5-7 |
+
+Use your judgment. When in doubt, prefer the tier above (broader) to avoid missing relevant literature.
+
+#### If BUILD mode:
+
+**Step 1** — Break the user's topic into sub-queries (count per tier above). For example, for "mRNA vaccine mechanisms": "mRNA vaccine immune response", "lipid nanoparticle mRNA delivery", "mRNA vaccine spike protein translation", "mRNA vaccine adjuvant innate immunity".
+
+**Step 2** — For each sub-query, call `mcp__claude_ai_PubMed__search_articles` with `max_results` set per tier, sorted by relevance. Pass `since_date` as `date_from` (converting `YYYY-MM-DD` → `YYYY/MM/DD`) and set `datetype: "edat"` (entry date).
+
+**Step 3** — Collect all returned PMIDs and deduplicate.
+
+**Step 4** — For the top N most relevant PMIDs (per tier), call `mcp__claude_ai_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
+
+**Step 5** — For the most important articles (count per tier; those most central to the topic), call `mcp__claude_ai_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
+
+**Step 6** — Optionally call `mcp__claude_ai_PubMed__find_related_articles` on the top seed PMIDs (count per tier) to discover additional relevant literature not found in the initial search.
+
+#### If UPDATE mode (two-track search):
+
+UPDATE mode splits the search budget into a **Recent track** (new articles since last run) and a **Gap-fill track** (older articles the initial BUILD may have missed). This ensures the KG improves its coverage of existing literature while also staying current.
+
+**Step 1: Collect known PMIDs.** Extract all PMIDs from `manifest.json` node entries into a `known_pmids` set. These will be excluded from both tracks' results.
+
+**Step 2: Identify weak spots.** Scan the existing KG for gap-fill targets:
+- Nodes with only 1 PMID (under-referenced)
+- Nodes with `evaluation_status: "failed"` (unverified claims)
+- Tags or categories that have fewer nodes than expected for the topic breadth
+Record these as the gap-fill focus areas.
+
+**Step 3: Allocate sub-query budget.** Split the tier's sub-query count ~60/40 between Recent and Gap-fill:
+
+| Tier | Total sub-queries | Recent track | Gap-fill track |
+|------|-------------------|-------------|----------------|
+| **Narrow** | 2-3 | 2 | 1 |
+| **Medium** | 3-5 | 3 | 2 |
+| **Broad** | 5-7 | 4 | 3 |
+
+**Step 4: Recent track.** Use the same facet decomposition as the original BUILD. For each sub-query, call `search_articles` with `date_from` = `since_date`, `datetype: "edat"`, and `max_results` per tier.
+
+**Step 5: Gap-fill track.** Craft queries that target the weak spots identified in Step 2. These queries MUST differ from the original BUILD queries — use:
+- Alternative terms, synonyms, or MeSH headings for the same concepts
+- Queries focused specifically on under-referenced nodes or failed evaluations
+- No `date_from` — search the full 5-year window
+- Same `max_results` per tier as the Recent track
+
+**Step 6: Merge and dedup.** Combine PMIDs from both tracks and remove any PMID already in `known_pmids`. The remaining novel PMIDs proceed to metadata and full-text retrieval (counts per tier table, unchanged).
+
+**Step 7: Related articles.** Call `find_related_articles` on the top seed PMIDs from **both** tracks (count per tier) to discover additional literature.
+
+#### Common rules (both modes):
 
 **Important**: Batch your MCP calls efficiently. Do not fire more than 5 calls in parallel to avoid rate limiting.
 
@@ -65,7 +129,7 @@ Report to the user: "Mode: BUILD — creating KG_TopicName/" or "Mode: UPDATE �
    - Not so fine-grained that it is a single sentence or trivial fact
    - Not so coarse that it covers an entire subfield
    - Roughly the level of a single "finding", "mechanism", "definition", or "therapeutic approach"
-   - Aim for 10-30 nodes depending on topic breadth
+   - Scale with the breadth tier from Phase 1b: Narrow ~8-15 nodes, Medium ~15-30 nodes, Broad ~25-45 nodes
 3. **Design the graph structure**:
    - Identify all nodes and write a brief title + summary for each
    - Determine relationships between nodes using this vocabulary:
@@ -120,17 +184,22 @@ Longer explanation with nuance.
 ### If UPDATE mode:
 
 1. **Load existing graph**: Read `manifest.json` and all node `.md` files listed in it.
-2. **Compare new material against existing nodes**:
+2. **Derive `since_date`** (if `--since` was not explicitly provided):
+   - If `manifest.json` has `schedule.last_run` (non-null), use that timestamp's date portion.
+   - Otherwise, fall back to the `updated` field in `manifest.json`.
+   - Convert to `YYYY/MM/DD` format and store as `since_date`. This will be used in Phase 1b to constrain PubMed searches.
+   - If `--since` was explicitly provided, use that value instead (convert `YYYY-MM-DD` → `YYYY/MM/DD`).
+3. **Compare new material against existing nodes**:
    - Identify existing nodes that need updated/additional references
    - Identify entirely new knowledge that warrants new nodes
    - Identify relationships that should be added or revised
-3. **Apply changes**:
+4. **Apply changes**:
    - For existing nodes gaining new references: append new PMIDs and update the Detail/Evidence sections
    - For new nodes: create new `.md` files with the next available `node_XXX` ID
    - Never delete existing nodes during an update — only add or augment
    - Mark each touched node with today's date in `updated`
-4. **Update manifest.json**: Merge new entries, increment `version`, update `statistics`
-5. **Update _index.md**: Add new nodes to the appropriate categories
+5. **Update manifest.json**: Merge new entries, increment `version`, update `statistics`
+6. **Update _index.md**: Add new nodes to the appropriate categories
 
 Track which nodes are "newly added or modified" — these go to Phase 3.
 

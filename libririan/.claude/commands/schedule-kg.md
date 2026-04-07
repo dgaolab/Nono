@@ -45,7 +45,7 @@ Use the `/schedule` skill to create a remote trigger with:
 Run /build-kg "<topic>" --output <KG_FolderName>
 
 This is a scheduled update run. The KG already exists — run in UPDATE mode.
-Search PubMed for articles published since the last update date found in manifest.json.
+UPDATE mode automatically filters PubMed searches to articles added since the last run (via schedule.last_run in manifest.json).
 Focus on finding new research that adds to or revises existing knowledge nodes.
 After the build completes, update the schedule.last_run timestamp in manifest.json.
 ```
