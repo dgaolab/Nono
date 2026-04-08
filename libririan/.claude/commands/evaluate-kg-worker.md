@@ -39,28 +39,59 @@ Example invocations:
 
 ## Step E1: PMID Existence Check
 
-For each PMID in each node's frontmatter:
-- Call `mcp__claude_ai_PubMed__get_article_metadata` with that PMID.
-- If the API returns valid metadata, the PMID exists. Record the article title and abstract.
-- If it returns an error or empty result, the PMID is **invalid** — flag it.
+For each PMID in each node's frontmatter, retrieve article metadata using the following **priority chain** — try each method in order and use the first that succeeds:
+
+1. **MCP (preferred):** Call `mcp__plugin_pubmed_PubMed__get_article_metadata` with the PMID.
+2. **MCP (alternate):** Call `mcp__claude_ai_PubMed__get_article_metadata` with the PMID.
+3. **curl fallback (last resort):** If neither MCP tool is available in this context, use PubMed E-utilities:
+   ```bash
+   curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={PMID}&retmode=xml&rettype=abstract"
+   ```
+   Parse the XML response to extract `<ArticleTitle>`, `<AbstractText>`, `<Journal><Title>`, and `<PubDate>`. If the response contains `<ERROR>` or no `<PubmedArticle>` element, the PMID is invalid.
+
+Regardless of which method succeeds:
+- If valid metadata is returned, the PMID exists. Record the article title and abstract.
+- If all methods return errors or empty results, the PMID is **invalid** — flag it.
+
+**Important:** Always attempt MCP tools first. The curl fallback exists only because this worker runs in a `context: fork` where MCP tools may not be available. Do NOT skip MCP and go straight to curl.
 
 ## Step E1b: NCT ID Verification
 
 If `clinicaltrials` is in `--sources` and the node has NCT IDs in `external_ids`:
-- For each NCT ID, call `mcp__plugin_clinical-trials_ClinicalTrials__get_trial_details` to confirm the trial exists and is relevant to the node's claim.
-- If the trial does not exist or is unrelated, flag the NCT ID.
+
+Try the following priority chain for each NCT ID:
+
+1. **MCP (preferred):** Call `mcp__plugin_clinical-trials_ClinicalTrials__get_trial_details` to confirm the trial exists and is relevant to the node's claim.
+2. **MCP (alternate):** Call `mcp__claude_ai_ClinicalTrials__get_trial_details`.
+3. **curl fallback:** If neither MCP tool is available:
+   ```bash
+   curl -s "https://clinicaltrials.gov/api/v2/studies/{NCT_ID}"
+   ```
+   Parse the JSON response to extract `protocolSection.identificationModule.officialTitle`, `protocolSection.statusModule.overallStatus`, and `protocolSection.designModule`. If the response contains an error or no `protocolSection`, the NCT ID is invalid.
+
+If the trial does not exist or is unrelated, flag the NCT ID.
 
 ## Step E1c: ChEMBL ID Verification
 
 If `chembl` is in `--sources` and the node has ChEMBL IDs in `external_ids`:
-- For each ChEMBL ID, call `mcp__plugin_chembl_ChEMBL__compound_search` or `mcp__plugin_chembl_ChEMBL__target_search` (as appropriate) to confirm the entry exists and is relevant.
-- If the entry does not exist or is unrelated, flag the ChEMBL ID.
+
+Try the following priority chain for each ChEMBL ID:
+
+1. **MCP (preferred):** Call `mcp__plugin_chembl_ChEMBL__compound_search` or `mcp__plugin_chembl_ChEMBL__target_search` (as appropriate) to confirm the entry exists and is relevant.
+2. **MCP (alternate):** Call `mcp__claude_ai_ChEMBL__compound_search` or `mcp__claude_ai_ChEMBL__target_search`.
+3. **curl fallback:** If neither MCP tool is available:
+   ```bash
+   curl -s "https://www.ebi.ac.uk/chembl/api/data/molecule/{CHEMBL_ID}.json"
+   ```
+   Parse the JSON response to extract `pref_name` and `molecule_chembl_id`. If the response contains an error or no `molecule_chembl_id`, the ChEMBL ID is invalid. For target IDs, use the `/target/` endpoint instead of `/molecule/`.
+
+If the entry does not exist or is unrelated, flag the ChEMBL ID.
 
 ---
 
 ## Step E2: Content Support Verification
 
-For each valid PMID, compare the node's knowledge claim against the article's abstract (and full text if available via `mcp__claude_ai_PubMed__get_full_text_article`).
+For each valid PMID, compare the node's knowledge claim against the article's abstract (and full text if available). To retrieve full text, use the same priority chain as Step E1: try `mcp__plugin_pubmed_PubMed__get_full_text_article`, then `mcp__claude_ai_PubMed__get_full_text_article`, then fall back to the PMC OA API via curl (`https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_json/{PMCID}/unicode`). Full text is optional — abstract-level verification is sufficient if full text is unavailable.
 
 Evaluate:
 1. Does this article actually discuss the topic claimed?
@@ -84,7 +115,7 @@ For NCT and ChEMBL references, apply the same logic: does the trial/compound dat
 ## Step E4: Remediation
 
 For failed nodes:
-1. Search PubMed again with the node's specific claim as the query using `mcp__claude_ai_PubMed__search_articles`.
+1. Search PubMed again with the node's specific claim as the query. Use the same priority chain: try `mcp__plugin_pubmed_PubMed__search_articles`, then `mcp__claude_ai_PubMed__search_articles`, then fall back to E-utilities via curl (`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={QUERY}&retmax=5&retmode=json`).
 2. If a better-matching article is found, substitute the reference ID in the node file and re-verify (repeat Steps E1-E3 for the new PMID).
 3. If remediation fails, mark `evaluation_status: "failed"` and add a `> [!warning]` callout in the markdown body explaining the issue.
 

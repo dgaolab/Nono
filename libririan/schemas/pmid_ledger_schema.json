@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PMID Ledger",
+  "description": "Schema for _pmid_ledger.json — persistent tracking of every PMID encountered during KG build/update cycles",
+  "type": "object",
+  "required": ["kg_name", "created", "updated", "version", "entries", "statistics"],
+  "properties": {
+    "kg_name": {
+      "type": "string",
+      "pattern": "^KG_",
+      "description": "Folder name of the knowledge graph, prefixed with KG_"
+    },
+    "created": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO date when the ledger was first created"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO date of the most recent ledger update"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Incremented on each write"
+    },
+    "entries": {
+      "type": "object",
+      "description": "Map of PMID string to entry object. Keyed by PMID for O(1) dedup lookup.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["disposition", "first_seen", "last_checked", "assigned_nodes"],
+        "properties": {
+          "title": {
+            "type": ["string", "null"],
+            "description": "Article title (null if metadata was not retrieved)"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["used", "irrelevant", "failed", "superseded"],
+            "description": "Current status: used (assigned to node), irrelevant (retrieved but not used), failed (evaluation failed), superseded (replaced during remediation)"
+          },
+          "first_seen": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO timestamp when this PMID was first encountered"
+          },
+          "last_checked": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO timestamp of the most recent interaction with this PMID"
+          },
+          "assigned_nodes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Node IDs this PMID is assigned to (empty for irrelevant/failed)"
+          },
+          "evidence_tier": {
+            "type": ["string", "null"],
+            "enum": ["meta_analysis", "rct", "cohort", "case_series", "case_report", "review", "opinion", "unclassified", null],
+            "description": "Evidence tier classification (null if not classified)"
+          },
+          "journal": {
+            "type": ["string", "null"],
+            "description": "Journal name (null if metadata was not retrieved)"
+          },
+          "year": {
+            "type": ["integer", "null"],
+            "description": "Publication year (null if metadata was not retrieved)"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Free-text notes (e.g., reason for irrelevance, failure details)"
+          }
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "required": ["total", "used", "irrelevant", "failed", "superseded"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "used": { "type": "integer", "minimum": 0 },
+        "irrelevant": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "superseded": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -119,6 +119,18 @@ def main():
         "total_chembl_ids": len(all_chembl_ids),
     }
 
+    # Include PMID ledger stats if ledger exists
+    ledger_path = os.path.join(kg_folder, "_pmid_ledger.json")
+    if os.path.exists(ledger_path):
+        try:
+            with open(ledger_path, "r", encoding="utf-8") as lfh:
+                ledger = json.load(lfh)
+            lstats = ledger.get("statistics", {})
+            stats["ledger_total"] = lstats.get("total", 0)
+            stats["ledger_irrelevant"] = lstats.get("irrelevant", 0)
+        except Exception:
+            pass
+
     if args.dry_run:
         json.dump(stats, sys.stdout, indent=2)
         print()

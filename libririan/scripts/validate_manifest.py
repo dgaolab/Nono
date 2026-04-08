@@ -59,6 +59,26 @@ def _soft_checks(manifest: dict, manifest_path: str):
             f"statistics.total_edges ({stats.get('total_edges')}) != actual edge count ({len(manifest.get('edges', []))})"
         )
 
+    # PMID ledger consistency
+    ledger_path = os.path.join(manifest_dir, "_pmid_ledger.json")
+    if os.path.exists(ledger_path):
+        try:
+            with open(ledger_path, "r", encoding="utf-8") as lfh:
+                ledger = json.load(lfh)
+            ledger_used = {pmid for pmid, e in ledger.get("entries", {}).items()
+                           if e.get("disposition") == "used"}
+            manifest_pmids = set()
+            for node in nodes:
+                manifest_pmids.update(str(p) for p in node.get("pubmed_ids", []))
+            orphaned = manifest_pmids - ledger_used
+            if orphaned:
+                warnings.append(f"PMIDs in manifest but not marked 'used' in ledger: {sorted(orphaned)}")
+            missing = ledger_used - manifest_pmids
+            if missing:
+                warnings.append(f"PMIDs marked 'used' in ledger but absent from manifest: {sorted(missing)}")
+        except Exception as e:
+            warnings.append(f"Could not validate PMID ledger: {e}")
+
     for w in warnings:
         print(f"Warning: {w}", file=sys.stderr)
 

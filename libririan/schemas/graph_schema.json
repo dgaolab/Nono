@@ -218,7 +218,9 @@
           "additionalProperties": { "type": "integer" }
         },
         "total_nct_ids": { "type": "integer", "minimum": 0 },
-        "total_chembl_ids": { "type": "integer", "minimum": 0 }
+        "total_chembl_ids": { "type": "integer", "minimum": 0 },
+        "ledger_total": { "type": "integer", "minimum": 0, "description": "Total PMIDs tracked in the PMID ledger" },
+        "ledger_irrelevant": { "type": "integer", "minimum": 0, "description": "PMIDs in the ledger marked as irrelevant" }
       }
     }
   }

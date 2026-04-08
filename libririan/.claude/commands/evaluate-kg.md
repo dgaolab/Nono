@@ -115,6 +115,16 @@ Repeat Steps 3a-3b for the next wave until all waves are processed.
 
 ---
 
+## Step 4.5: Update PMID Ledger
+
+If `{--kg}/_pmid_ledger.json` exists, sync it with the merged evaluation results:
+```
+python3 scripts/pmid_ledger.py sync {--kg} --from-eval-log
+```
+This reads `_evaluation_log.json` and updates PMID dispositions: marking failed/invalid PMIDs as `"failed"`, adding remediation PMIDs (found in node files but not yet in the ledger) as `"used"`, and updating `last_checked` timestamps for verified PMIDs. If the ledger does not exist, skip this step.
+
+---
+
 ## Step 5: Update Manifest Statistics
 
 Run the statistics update script:

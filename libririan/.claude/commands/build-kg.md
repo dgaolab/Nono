@@ -46,6 +46,13 @@ If `--since` was explicitly provided, use that value. Otherwise:
 
 Convert the resolved date to `YYYY/MM/DD` format and store as `since_date` for use in Phase 1b.
 
+### Initialize PMID Ledger
+
+After determining mode and resolving `since_date`, initialize or load the persistent PMID ledger:
+
+- **BUILD mode**: Run `python3 scripts/pmid_ledger.py init {KG_FOLDER} --kg-name {KG_NAME}` to create an empty `_pmid_ledger.json`. The `--kg-name` flag ensures the ledger's `kg_name` matches the manifest even when the folder basename differs (e.g., `--output /tmp/test` with `kg_name: KG_Foo`).
+- **UPDATE mode**: Check if `_pmid_ledger.json` exists in the KG folder. If it does not (legacy KG created before ledger support), run `python3 scripts/pmid_ledger.py init {KG_FOLDER}` to bootstrap the ledger from `manifest.json` — this will import all existing PMIDs as `disposition: "used"`.
+
 ---
 
 ## Phase 1: Source Gathering
@@ -88,11 +95,25 @@ Use your judgment. When in doubt, prefer the tier above (broader) to avoid missi
 
 **Step 2** — For each sub-query, call `mcp__claude_ai_PubMed__search_articles` with `max_results` set per tier, sorted by relevance. Pass `since_date` as `date_from` (converting `YYYY-MM-DD` → `YYYY/MM/DD`) and set `datetype: "edat"` (entry date).
 
-**Step 3** — Collect all returned PMIDs and deduplicate.
+**Step 3** — Collect all returned PMIDs and deduplicate. Also exclude any PMIDs already tracked in the PMID ledger:
+```
+python3 scripts/pmid_ledger.py query {KG_FOLDER} --pmids-only
+```
+Remove any returned PMIDs from the candidate set. (In a fresh BUILD the ledger is empty, so this is a no-op. In a re-build of an existing KG it prevents re-fetching previously seen literature.)
+
+**Step 3b — Record discarded PMIDs.** All search-returned PMIDs that did not make the top-N metadata cut: write a batch-add JSON file with each entry having `disposition: "irrelevant"` and the PMID value (title is null at this point since metadata was not retrieved). Run:
+```
+python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded.json
+```
 
 **Step 4** — For the top N most relevant PMIDs (per tier), call `mcp__claude_ai_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
 
 **Step 4b — Cache metadata.** Retain all metadata retrieved in this step as a working mapping of `PMID → {title, abstract, authors, journal, year, publication_type}`. This cache persists through Phases 2-3 and is used by Phase 3 Step E1 to avoid redundant API calls.
+
+**Step 4c — Persist metadata to ledger.** For every PMID whose metadata was just retrieved, prepare a batch-add JSON file. Each entry should include: `"disposition": "used"`, `"title"`, `"journal"`, `"year"`, and `"tier"` (from the evidence tier classification). Run:
+```
+python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_metadata.json
+```
 
 **Step 5** — For the most important articles (count per tier; those most central to the topic), call `mcp__claude_ai_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
 
@@ -102,7 +123,11 @@ Use your judgment. When in doubt, prefer the tier above (broader) to avoid missi
 
 UPDATE mode splits the search budget into a **Recent track** (new articles since last run) and a **Gap-fill track** (older articles the initial BUILD may have missed). This ensures the KG improves its coverage of existing literature while also staying current.
 
-**Step 1: Collect known PMIDs.** Extract all PMIDs from `manifest.json` node entries into a `known_pmids` set. These will be excluded from both tracks' results.
+**Step 1: Collect known PMIDs.** Query the PMID ledger for ALL known PMIDs (every disposition — `used`, `irrelevant`, `failed`, `superseded`):
+```
+python3 scripts/pmid_ledger.py query {KG_FOLDER} --pmids-only
+```
+Store the result as `known_pmids`. This excludes not only PMIDs assigned to nodes, but also PMIDs previously retrieved and deemed irrelevant — preventing redundant MCP calls on already-evaluated literature. These will be excluded from both tracks' results.
 
 **Step 2: Identify weak spots.** Scan the existing KG for gap-fill targets:
 - Nodes with only 1 PMID (under-referenced)
@@ -127,6 +152,11 @@ Record these as the gap-fill focus areas.
 - Same `max_results` per tier as the Recent track
 
 **Step 6: Merge and dedup.** Combine PMIDs from both tracks and remove any PMID already in `known_pmids`. The remaining novel PMIDs proceed to metadata and full-text retrieval (counts per tier table, unchanged).
+
+**Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `journal`, `year`, and `tier`. Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
+```
+python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_update_batch.json
+```
 
 **Step 7: Related articles.** Call `find_related_articles` on the top seed PMIDs from **both** tracks (count per tier) to discover additional literature.
 
@@ -193,6 +223,14 @@ Record these as the gap-fill focus areas.
    Store in the node frontmatter `entities` array. This is best-effort — apply your biomedical knowledge to normalize, but prefix uncertain normalizations with `?` on the `normalized_id` (e.g., `"?HGNC:12345"`). Entities enable cross-KG linking (Phase F) and structured queries.
 
 4. **Assign references**: For each node, identify which PMIDs, NCT IDs, and/or ChEMBL IDs from the gathered material support it. **Every node MUST have at least one verifiable reference** (PMID, NCT ID, or ChEMBL ID). Prefer PubMed-backed nodes when possible — nodes backed exclusively by ClinicalTrials.gov or ChEMBL data are valid but should be the exception. For each reference on a node, write a specific `supports` statement describing what it contributes to this node's claim.
+
+4c. **Update ledger assignments.** After all nodes have been assigned their references, update the PMID ledger:
+   1. For each PMID assigned to a node, prepare a batch entry with `disposition: "used"` and the `node` field set to the assigned node ID.
+   2. For PMIDs that were metadata-fetched (in the cache from Step 4b) but NOT assigned to any node, prepare entries with `disposition: "irrelevant"` and `notes: "metadata-fetched but not assigned to any node"`.
+   3. Run:
+      ```
+      python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_assignments.json
+      ```
 
 4b. **Evidence tier classification.** For each PMID assigned to a node, classify it into an evidence tier based on metadata from the Phase 1 cache (article type, title keywords, publication type):
 
@@ -372,6 +410,7 @@ In BUILD mode, do not generate a changelog.
    - `manifest.json` — complete and up-to-date
    - `_index.md` — Obsidian-compatible with wikilinks and mermaid diagram
    - `_evaluation_log.json` — full verification audit trail
+   - `_pmid_ledger.json` — PMID provenance ledger
    - `_changelog.md` — update history (UPDATE mode only)
    - `nodes/*.md` — all node files
 
@@ -379,7 +418,13 @@ In BUILD mode, do not generate a changelog.
    ```
    python3 scripts/validate_manifest.py {KG_FOLDER}/manifest.json
    ```
-   If validation fails, fix the reported errors before proceeding. Check stderr for soft warnings (node file existence, edge reference validity, statistics consistency).
+   If validation fails, fix the reported errors before proceeding. Check stderr for soft warnings (node file existence, edge reference validity, statistics consistency, ledger consistency).
+
+1c. Validate the PMID ledger:
+   ```
+   python3 scripts/pmid_ledger.py validate {KG_FOLDER}
+   ```
+   If validation fails, investigate and fix. Warnings about ledger-manifest drift should be addressed by running `python3 scripts/pmid_ledger.py sync {KG_FOLDER}`.
 
 2. Print a terminal summary:
 
@@ -388,7 +433,7 @@ In BUILD mode, do not generate a changelog.
 Folder: KG_TopicName/
 Mode: BUILD | UPDATE (v2)
 Nodes: 15 created, 3 updated
-References: 28 unique PMIDs
+References: 28 unique PMIDs (ledger: 85 tracked, 50 irrelevant, 5 failed, 2 superseded)
 Evaluation: 14 passed, 1 failed
 Warnings: [list any failed nodes or issues]
 ```
