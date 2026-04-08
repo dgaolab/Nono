@@ -334,7 +334,10 @@ Where:
 
 1. Read the `_evaluation_log.json` written by the evaluator.
 2. Read any node files that were modified (remediated or marked as failed).
-3. Verify the `manifest.json` statistics were updated correctly. If not, update them.
+3. Ensure manifest statistics are up-to-date by running:
+   ```
+   python3 scripts/update_manifest_stats.py {KG_FOLDER}
+   ```
 4. Report the evaluation results to the user before proceeding to Phase 4.
 
 ---
@@ -371,6 +374,12 @@ In BUILD mode, do not generate a changelog.
    - `_evaluation_log.json` — full verification audit trail
    - `_changelog.md` — update history (UPDATE mode only)
    - `nodes/*.md` — all node files
+
+1b. Validate the manifest against the schema:
+   ```
+   python3 scripts/validate_manifest.py {KG_FOLDER}/manifest.json
+   ```
+   If validation fails, fix the reported errors before proceeding. Check stderr for soft warnings (node file existence, edge reference validity, statistics consistency).
 
 2. Print a terminal summary:
 

@@ -92,41 +92,43 @@ Repeat Steps 3a-3b for the next wave until all waves are processed.
 
 ## Step 4: Merge Results
 
-1. If `{--kg}/_evaluation_log.json` already exists, read it and build a map keyed by `node_id`.
-2. For each `_eval_chunk_{N}.json` file:
-   - Read and parse the JSON array.
-   - For each entry, upsert into the map: replace any existing entry with the same `node_id`, or append if new.
-3. For any permanently failed chunk nodes (from Step 3b retries that failed), add an error entry:
+1. For any permanently failed chunk nodes (from Step 3b retries that failed), write an error entry to a new chunk file `_eval_chunk_error.json`:
    ```json
-   {
-     "node_id": "node_XXX",
-     "timestamp": "...",
-     "pmid_checks": [],
-     "nct_checks": [],
-     "chembl_checks": [],
-     "overall_status": "error",
-     "notes": "Evaluation agent failed to complete. Manual review required."
-   }
+   [
+     {
+       "node_id": "node_XXX",
+       "timestamp": "...",
+       "pmid_checks": [],
+       "nct_checks": [],
+       "chembl_checks": [],
+       "overall_status": "error",
+       "notes": "Evaluation agent failed to complete. Manual review required."
+     }
+   ]
    ```
-4. Write the merged array to `{--kg}/_evaluation_log.json`.
+
+2. Merge all chunk files and clean up in one step:
+   ```
+   python3 scripts/merge_eval_chunks.py {--kg} --cleanup
+   ```
+   This reads all `_eval_chunk_*.json` files, merges them with any existing `_evaluation_log.json` (dedup by `node_id`, later entry wins), writes the merged result, and deletes the chunk files.
 
 ---
 
 ## Step 5: Update Manifest Statistics
 
-1. Read `{--kg}/manifest.json`.
-2. For each evaluated node ID, read the node's `.md` file and check its `evaluation_status` field.
-3. Count `evaluation_passed` and `evaluation_failed` across all evaluated nodes.
-4. Update the `statistics` section in `manifest.json` with the new counts.
+Run the statistics update script:
+```
+python3 scripts/update_manifest_stats.py {--kg}
+```
 
-This step re-reads node files (rather than trusting chunk data) to ensure accuracy, since the workers update node files directly during evaluation.
+This re-reads all node `.md` files and recomputes all statistics fields (`total_nodes`, `total_edges`, `total_unique_pmids`, `evaluation_passed`, `evaluation_failed`, `evidence_tier_distribution`, `total_nct_ids`, `total_chembl_ids`), then updates `manifest.json`.
 
 ---
 
-## Step 6: Clean Up and Report
+## Step 6: Report
 
-1. Delete all `_eval_chunk_*.json` files from the KG folder.
-2. Report the final summary:
+1. Report the final summary:
 
 > **Evaluation complete.**
 > - Total nodes evaluated: {N}

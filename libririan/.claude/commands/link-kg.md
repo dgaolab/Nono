@@ -21,24 +21,21 @@ If fewer than 2 KG folders are found, report: "Need at least 2 knowledge graphs 
 
 ## Phase 1: Discovery
 
-1. For each KG folder, read `manifest.json` and load the node index.
-2. Build three cross-reference indices:
+Build the three cross-reference indices by running the utility script:
+```
+python3 scripts/build_cross_indices.py {kg_folder_1} {kg_folder_2} [...]
+```
 
-### Index A: Shared References (strongest signal)
-Map each reference ID (PMID, NCT ID, ChEMBL ID) to the list of `(KG_name, node_id)` pairs that cite it.
-- Extract PMIDs from each node's `pubmed_ids` array.
-- Extract NCT/ChEMBL IDs from each node's `external_ids` array (if present).
-- Any reference cited by nodes in 2+ different KGs is a cross-link candidate.
+The script outputs a JSON object with three indices:
 
-### Index B: Shared Entities (strong signal)
-Map each `normalized_id` from node `entities` arrays to `(KG_name, node_id)` pairs.
-- Only use entities with a `normalized_id` that does NOT start with `?` (uncertain normalizations are excluded).
-- Any entity referenced by nodes in 2+ different KGs is a cross-link candidate.
+### Index A: `shared_references` (strongest signal)
+Maps each reference ID (PMID, NCT ID, ChEMBL ID) to the list of `(kg, node_id)` pairs that cite it. Only includes references cited by nodes in 2+ different KGs.
 
-### Index C: Topic Similarity (weak signal)
-For each pair of KGs, compare node summaries and keywords for semantic overlap.
-- This is a fallback for cases where neither shared references nor shared entities exist but the concepts are clearly related.
-- Only flag high-confidence matches — err on the side of missing a link over creating a spurious one.
+### Index B: `shared_entities` (strong signal)
+Maps each `normalized_id` from node `entities` arrays to `(kg, node_id, entity_name, entity_type)` entries. Excludes uncertain normalizations (prefixed with `?`). Only includes entities referenced by nodes in 2+ different KGs.
+
+### Index C: `keyword_overlap` (weak signal)
+Lists node pairs across different KGs that share 2+ keywords. This is a fallback for cases where neither shared references nor shared entities exist but the concepts are clearly related. Only flag high-confidence matches — err on the side of missing a link over creating a spurious one.
 
 Report the index sizes: "Built cross-reference indices: X shared references, Y shared entities, Z topic similarity candidates."
 
@@ -77,16 +74,15 @@ For each confirmed cross-KG link:
 
 ### 3a. Update node files (both sides)
 
-Add to the node's YAML frontmatter:
-```yaml
-cross_kg_links:
-  - kg: "KG_OtherTopic"
-    node: "node_005"
-    relationship: "cross_kg_shared_evidence"
-    shared: ["PMID:35486828"]
+Use the frontmatter update script to add cross-KG link data to each node:
+```bash
+python3 scripts/update_frontmatter.py {node_path} \
+  '{"cross_kg_links": [{"kg": "KG_OtherTopic", "node": "node_005", "relationship": "cross_kg_shared_evidence", "shared": ["PMID:35486828"]}]}'
 ```
 
-Add to the node's "Cross-KG Links" section (create if it doesn't exist):
+The script deep-merges `cross_kg_links` by matching on the `(kg, node)` composite key — existing links to the same remote node are updated, new links are appended.
+
+Then manually add or update the "Cross-KG Links" markdown section in the node body:
 ```markdown
 ## Cross-KG Links
 - [[KG_OtherTopic/nodes/node_005_name]] (shared evidence: PMID 35486828)

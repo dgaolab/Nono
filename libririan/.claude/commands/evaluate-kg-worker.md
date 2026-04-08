@@ -28,9 +28,12 @@ Example invocations:
 ## Step 0: Load Nodes
 
 1. Read `{--kg}/manifest.json` to get the node index.
-2. For each node ID in `--nodes`, read the corresponding `.md` file from the `nodes/` subdirectory.
-3. Extract from each node's YAML frontmatter: `title`, `pubmed_ids`, `external_ids`, `evaluation_status`.
-4. Report: "Evaluating N nodes in KG_Name."
+2. For each node ID in `--nodes`, parse the corresponding `.md` file using the utility script:
+   ```
+   python3 scripts/parse_node.py {--kg}/nodes/{node_file}
+   ```
+   The JSON output contains `frontmatter` (dict) and `body` (string). Extract from the frontmatter: `title`, `pubmed_ids`, `external_ids`, `evaluation_status`.
+3. Report: "Evaluating N nodes in KG_Name."
 
 ---
 
@@ -123,11 +126,29 @@ Build the evaluation entries array:
 ## Step E6: Update Node Files and Manifest
 
 **Always** (both chunk and direct modes):
-- Set `verified: true/false` on each PMID entry in the node's frontmatter.
-- Set `evaluation_status` to `passed` or `failed` in the node's frontmatter.
+Use the frontmatter update script to set evaluation results on each node. For each evaluated node, run:
+```
+python3 scripts/update_frontmatter.py {node_path} '{json_updates}'
+```
+
+Where `{json_updates}` is a JSON object containing the fields to update. For example:
+```bash
+python3 scripts/update_frontmatter.py KG_X/nodes/node_001_foo.md \
+  '{"evaluation_status": "passed", "pubmed_ids": [{"pmid": "35486828", "verified": true}]}'
+```
+
+The script deep-merges the updates into the existing frontmatter — it matches PMID entries by their `pmid` value, so only the `verified` field is changed on matching entries. New entries are appended.
+
+For complex updates with shell-escaping concerns, write the JSON to a temp file and use `--updates-file`:
+```bash
+python3 scripts/update_frontmatter.py {node_path} --updates-file /tmp/node_updates.json
+```
 
 **Only if `--chunk-id` is absent** (direct evaluation):
-- Update `manifest.json` statistics: `evaluation_passed` and `evaluation_failed` counts.
+Update manifest statistics by running:
+```
+python3 scripts/update_manifest_stats.py {--kg}
+```
 
 When running as a chunk worker, the orchestrator handles manifest statistics after merging all chunks.
 
