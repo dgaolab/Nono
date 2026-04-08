@@ -9,14 +9,14 @@ Parse `$ARGUMENTS` for:
 - **--source <folder>** (optional): Path to a folder containing source materials (markdown, text, PDF files) to incorporate.
 - **--output <name>** (optional): Name for the output KG folder.
 - **--since <date>** (optional): Only search PubMed for articles added on or after this date. Format: `YYYY-MM-DD`. Defaults: in BUILD mode, 5 years before today's date; in UPDATE mode, auto-derived from `manifest.json` (see Phase 0).
-- **--depth <narrow|medium|broad>** (optional): Override the automatic topic breadth tier classification in Phase 1b Step 0. Use this to force a specific search scale regardless of topic complexity.
+- **--breadth <narrow|medium|broad>** (optional): Override the automatic topic breadth tier classification in Phase 1b Step 0. Use this to force a specific search scale regardless of topic complexity.
 
 Example invocations:
 ```
 /build-kg "CRISPR gene therapy"
 /build-kg "mRNA vaccine mechanisms" --source ./papers --output KG_mRNA_Vaccines
 /build-kg "mRNA vaccine mechanisms" --output KG_mRNA_Vaccines --since 2026-03-01
-/build-kg "sodium channels" --depth broad
+/build-kg "sodium channels" --breadth broad
 ```
 
 If no arguments are provided, ask the user for a topic.
@@ -72,7 +72,7 @@ A topic can activate both additional sources. Store the result as `active_source
 
 **Step 0 — Assess topic breadth and set search scale:**
 
-If `--depth` was provided, use that tier directly and skip the classification below. Otherwise, classify the topic into one of three tiers based on how many distinct sub-fields or facets it spans:
+If `--breadth` was provided, use that tier directly and skip the classification below. Otherwise, classify the topic into one of three tiers based on how many distinct sub-fields or facets it spans:
 
 | Tier | Criteria | Sub-queries | `max_results` per query | Metadata retrieval | Full-text retrieval | Related-article seeds |
 |------|----------|-------------|------------------------|--------------------|---------------------|-----------------------|

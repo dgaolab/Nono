@@ -85,6 +85,26 @@ def main():
         tier = fm.get("evidence_tier", "unclassified")
         tier_distribution[tier] = tier_distribution.get(tier, 0) + 1
 
+    # Sync per-node evaluation_status and evidence_tier from node files into manifest
+    node_fm_by_id: dict[str, dict] = {}
+    for node_file in node_files:
+        try:
+            fm, _ = parse(node_file)
+            node_id = fm.get("id")
+            if node_id:
+                node_fm_by_id[node_id] = fm
+        except Exception:
+            pass
+
+    for manifest_node in manifest.get("nodes", []):
+        node_id = manifest_node.get("id")
+        if node_id in node_fm_by_id:
+            fm = node_fm_by_id[node_id]
+            if "evaluation_status" in fm:
+                manifest_node["evaluation_status"] = fm["evaluation_status"]
+            if "evidence_tier" in fm:
+                manifest_node["evidence_tier"] = fm["evidence_tier"]
+
     # Edge count from manifest (edges are authoritative in manifest, not in node files)
     total_edges = len(manifest.get("edges", []))
 
