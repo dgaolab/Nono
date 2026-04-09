@@ -10,6 +10,7 @@ Parse `$ARGUMENTS` for:
 - **--output <name>** (optional): Name for the output KG folder.
 - **--since <date>** (optional): Only search PubMed for articles added on or after this date. Format: `YYYY-MM-DD`. Defaults: in BUILD mode, 5 years before today's date; in UPDATE mode, auto-derived from `manifest.json` (see Phase 0).
 - **--breadth <narrow|medium|broad>** (optional): Override the automatic topic breadth tier classification in Phase 1b Step 0. Use this to force a specific search scale regardless of topic complexity.
+- **--interactive** (optional flag): Pause after Phase 1 (source gathering) to present a summary of gathered material and let the user steer emphasis, depth, and scope before graph construction begins.
 
 Example invocations:
 ```
@@ -17,6 +18,7 @@ Example invocations:
 /build-kg "mRNA vaccine mechanisms" --source ./papers --output KG_mRNA_Vaccines
 /build-kg "mRNA vaccine mechanisms" --output KG_mRNA_Vaccines --since 2026-03-01
 /build-kg "sodium channels" --breadth broad
+/build-kg "sodium channels" --interactive
 ```
 
 If no arguments are provided, ask the user for a topic.
@@ -184,6 +186,66 @@ python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_update_ba
 #### Common rules (all source phases):
 
 **Important**: Batch your MCP calls efficiently. Do not fire more than 5 calls in parallel to avoid rate limiting.
+
+### 1e. Interactive Checkpoint (if `--interactive` is set)
+
+**Skip this section entirely if `--interactive` was NOT specified.**
+
+After all source gathering is complete (Phases 1a through 1d), pause and present a summary to the user before proceeding to Phase 2.
+
+#### Present the Source Gathering Report:
+
+```
+=== Source Gathering Complete — Awaiting Review ===
+Topic: {topic}
+Mode: {BUILD | UPDATE}
+Breadth tier: {narrow | medium | broad}
+Active sources: {pubmed, clinicaltrials, chembl, user_provided}
+
+PubMed:
+  Sub-queries used: {list each sub-query}
+  Total PMIDs retrieved: {count}
+  Metadata fetched: {count}
+  Full texts read: {count}
+  Related article seeds: {count}
+
+ClinicalTrials.gov: (only if queried)
+  Trials found: {count}
+  Details retrieved: {count}
+
+ChEMBL: (only if queried)
+  Compounds/targets found: {count}
+  Mechanisms retrieved: {count}
+
+User sources: (only if --source was provided)
+  Files read: {count}
+  Knowledge fragments extracted: {count}
+
+Top 5 most relevant articles (by centrality to topic):
+1. PMID XXXXXXXX — "Title" (Author, Year, Journal)
+2. PMID YYYYYYYY — "Title" (Author, Year, Journal)
+3. ...
+```
+
+#### Ask the user:
+
+> **Review the gathered sources above.** You can steer the next phase:
+> 1. **Proceed** — build the graph from all gathered material (default)
+> 2. **Adjust emphasis** — tell me which sub-topics to prioritize or de-emphasize
+> 3. **Expand** — request additional sub-queries or broader search
+> 4. **Narrow** — exclude specific sub-topics or sources
+> 5. **Add sources** — provide additional material to incorporate
+>
+> Type a number or describe what you'd like to change. Press Enter to proceed with defaults.
+
+Wait for the user's response. Apply their guidance:
+- If "proceed" or empty: continue to Phase 2 with no changes.
+- If "adjust emphasis": note the priority ordering and weight those topics more heavily when determining node granularity and depth in Phase 2.
+- If "expand": run additional PubMed sub-queries with the user's terms, fetch metadata, and add to the gathered material. Then re-present the updated summary.
+- If "narrow": exclude the specified material from Phase 2 consideration. Mark excluded PMIDs as `disposition: "irrelevant"` in the ledger.
+- If "add sources": read the additional files and extract knowledge fragments, then re-present.
+
+After the user confirms, proceed to Phase 2.
 
 ---
 
@@ -411,6 +473,7 @@ In BUILD mode, do not generate a changelog.
    - `_index.md` — Obsidian-compatible with wikilinks and mermaid diagram
    - `_evaluation_log.json` — full verification audit trail
    - `_pmid_ledger.json` — PMID provenance ledger
+   - `_log.md` — operation log (append-only)
    - `_changelog.md` — update history (UPDATE mode only)
    - `nodes/*.md` — all node files
 
@@ -426,7 +489,12 @@ In BUILD mode, do not generate a changelog.
    ```
    If validation fails, investigate and fix. Warnings about ledger-manifest drift should be addressed by running `python3 scripts/pmid_ledger.py sync {KG_FOLDER}`.
 
-2. Print a terminal summary:
+2. Log the operation:
+   ```
+   python3 scripts/append_log.py {KG_FOLDER} --op {build|update} --summary "Mode: {mode}, v{version}. Nodes: {created} created, {updated} updated. PMIDs: {unique_count}. Eval: {passed} passed, {failed} failed."
+   ```
+
+3. Print a terminal summary:
 
 ```
 === Knowledge Graph Complete ===

@@ -150,6 +150,11 @@ This re-reads all node `.md` files and recomputes all statistics fields (`total_
 
 If any nodes have `overall_status: "error"`, list them explicitly and recommend manual review.
 
+2. Log the evaluation:
+   ```
+   python3 scripts/append_log.py {--kg} --op evaluate --summary "Evaluated {N} nodes: {X} passed, {Y} failed, {Z} errors. Waves: {W}, Chunks: {C}."
+   ```
+
 ---
 
 ## Important Rules

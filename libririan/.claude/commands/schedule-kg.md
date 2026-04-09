@@ -72,6 +72,11 @@ Cron: 0 8 * * 1 (Every Monday at 8:00 AM)
 Next run: <estimated next run time>
 ```
 
+Log the operation:
+```
+python3 scripts/append_log.py {KG_FOLDER} --op build --summary "Schedule created: {trigger_name}, cron: {cron_expression}."
+```
+
 ---
 
 ## Mode: List Schedules
@@ -105,6 +110,11 @@ If no schedules are found, report: "No active KG schedules found."
 Trigger: kg-update-mRNA-vaccines
 KG: KG_mRNA_Vaccines/
 The KG will no longer be updated automatically.
+```
+
+Log the operation:
+```
+python3 scripts/append_log.py {KG_FOLDER} --op build --summary "Schedule removed: {trigger_name}."
 ```
 
 ---

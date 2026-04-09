@@ -163,6 +163,13 @@ Nodes updated: 18
 
 If `--dry-run` was used, append: "(dry run — no files modified)"
 
+Log the operation to each linked KG. For each KG that had at least one link written:
+```
+python3 scripts/append_log.py {kg_folder} --op link --summary "Linked with {other_kgs}. Links: {total} (evidence: {ev}, entities: {ent}, overlap: {ovl}). Controversies: {N}."
+```
+
+If `--dry-run`, log with suffix: "(dry run — no files modified)"
+
 ---
 
 ## Important Rules
