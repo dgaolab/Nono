@@ -286,15 +286,7 @@ After the user confirms, proceed to Phase 2.
 
 4. **Assign references**: For each node, identify which PMIDs, NCT IDs, and/or ChEMBL IDs from the gathered material support it. **Every node MUST have at least one verifiable reference** (PMID, NCT ID, or ChEMBL ID). Prefer PubMed-backed nodes when possible — nodes backed exclusively by ClinicalTrials.gov or ChEMBL data are valid but should be the exception. For each reference on a node, write a specific `supports` statement describing what it contributes to this node's claim.
 
-4c. **Update ledger assignments.** After all nodes have been assigned their references, update the PMID ledger:
-   1. For each PMID assigned to a node, prepare a batch entry with `disposition: "used"` and the `node` field set to the assigned node ID.
-   2. For PMIDs that were metadata-fetched (in the cache from Step 4b) but NOT assigned to any node, prepare entries with `disposition: "irrelevant"` and `notes: "metadata-fetched but not assigned to any node"`.
-   3. Run:
-      ```
-      python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_assignments.json
-      ```
-
-4b. **Evidence tier classification.** For each PMID assigned to a node, classify it into an evidence tier based on metadata from the Phase 1 cache (article type, title keywords, publication type):
+4b. **Evidence tier classification (MANDATORY — do NOT skip).** For each PMID assigned to a node, classify it into an evidence tier based on metadata from the Phase 1b Step 4b cache (article title, abstract, publication type). Scan the title and publication type for the keyword indicators below:
 
    | Tier | Label | Score | Indicators in title or publication type |
    |------|-------|-------|-----------------------------------------|
@@ -308,7 +300,17 @@ After the user confirms, proceed to Phase 2.
 
    If none of the indicators match, assign `unclassified`. Store the per-PMID tier in the node frontmatter (`evidence_tier` field on each PMID entry). Assign each node a top-level `evidence_tier` equal to the highest-scoring tier among its PMIDs. Update manifest `statistics.evidence_tier_distribution` with node counts per tier.
 
-5. **Write node files**: For each node, create a `.md` file in the `nodes/` subdirectory following this format:
+   **Check yourself**: If every PMID is ending up as `unclassified`, you are likely not scanning the cached titles/abstracts for the keyword indicators above. Most research articles will match at least one tier — pure `unclassified` should be rare (e.g., methodology papers, bioinformatics tool descriptions).
+
+4c. **Update ledger assignments.** After all nodes have been assigned their references and evidence tiers, update the PMID ledger:
+   1. For each PMID assigned to a node, prepare a batch entry with `disposition: "used"`, the `node` field set to the assigned node ID, and `evidence_tier` set to the tier classified in Step 4b.
+   2. For PMIDs that were metadata-fetched (in the Phase 1b Step 4b cache) but NOT assigned to any node, prepare entries with `disposition: "irrelevant"` and `notes: "metadata-fetched but not assigned to any node"`.
+   3. Run:
+      ```
+      python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_assignments.json
+      ```
+
+5. **Write node files**: For each node, create a `.md` file in the `nodes/` subdirectory. Use the evidence tiers classified in Step 4b — both the per-PMID `evidence_tier` and the node-level `evidence_tier` must reflect the classification, NOT default to `unclassified`. Follow this format:
 
 ```yaml
 ---
