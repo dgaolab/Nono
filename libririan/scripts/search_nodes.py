@@ -263,6 +263,8 @@ def main():
                         help="Minimum evidence tier to include")
     parser.add_argument("--tag-filter", dest="tag_filter",
                         help="Only include nodes with this tag (case-insensitive)")
+    parser.add_argument("--compact", action="store_true",
+                        help="Omit score_breakdown, match details, and query_analysis")
     args = parser.parse_args()
 
     min_tier_rank = EVIDENCE_TIER_ORDER.get(args.evidence_min, -1) if args.evidence_min else -1
@@ -285,8 +287,10 @@ def main():
             all_nodes.append((kg_name, node))
 
     if not all_nodes:
-        json.dump({"results": [], "query_analysis": {}, "summary": {"total_scanned": 0, "matched": 0}},
-                  sys.stdout, indent=2)
+        output = {"results": [], "summary": {"total_scanned": 0, "matched": 0}}
+        if not args.compact:
+            output["query_analysis"] = {}
+        json.dump(output, sys.stdout, indent=2)
         print()
         sys.exit(0)
 
@@ -310,8 +314,6 @@ def main():
     # Build IDF from all summaries
     all_summary_tokens = [tokenize(n.get("summary", "")) for _, n in all_nodes]
     idf = build_idf(all_summary_tokens)
-
-    query_tfidf = tfidf_vector(query_tokens, idf)
 
     # Score each node
     results = []
@@ -342,25 +344,27 @@ def main():
 
         if final_score > 0:
             entity_ids_matched.update(matched_ent)
-            results.append({
+            entry = {
                 "kg": kg_name,
                 "node_id": node_id,
                 "title": node.get("title", ""),
                 "file": node.get("file", ""),
                 "score": round(final_score, 4),
-                "score_breakdown": {
+                "evidence_tier": tier,
+                "evaluation_status": eval_status,
+            }
+            if not args.compact:
+                entry["score_breakdown"] = {
                     "keyword_score": round(kw_score, 4),
                     "entity_score": round(ent_score, 4),
                     "summary_score": round(sum_score, 4),
                     "tag_score": round(tag_s, 4),
                     "eval_bonus": round(eval_b, 4),
                     "tier_bonus": round(tier_b, 4),
-                },
-                "matched_keywords": matched_kw,
-                "matched_entities": matched_ent,
-                "evidence_tier": tier,
-                "evaluation_status": eval_status,
-            })
+                }
+                entry["matched_keywords"] = matched_kw
+                entry["matched_entities"] = matched_ent
+            results.append(entry)
 
     # Sort by score descending, take top N
     results.sort(key=lambda r: r["score"], reverse=True)
@@ -369,16 +373,17 @@ def main():
 
     output = {
         "results": results,
-        "query_analysis": {
-            "tokens": query_tokens,
-            "extracted_entities": query_entities,
-            "entity_ids_matched": sorted(entity_ids_matched),
-        },
         "summary": {
             "total_scanned": total_before_filter,
             "matched": total_matched,
         },
     }
+    if not args.compact:
+        output["query_analysis"] = {
+            "tokens": query_tokens,
+            "extracted_entities": query_entities,
+            "entity_ids_matched": sorted(entity_ids_matched),
+        }
 
     json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
     print()

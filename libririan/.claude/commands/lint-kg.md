@@ -38,25 +38,34 @@ If `--stale-check` is given without `--deep`, warn the user and enable `--deep` 
 
 ## Phase 2: Structural Lint
 
-Run the automated checks via the Python script:
+Run the automated checks via the Python script. Use `--summary-only` to reduce output (omits the per-finding details array):
 
 ```bash
-python3 scripts/lint_kg.py {kg_folder}
+python3 scripts/lint_kg.py {kg_folder} --summary-only
 ```
 
 If `--fix` was specified, add the `--fix` flag:
 ```bash
-python3 scripts/lint_kg.py {kg_folder} --fix
+python3 scripts/lint_kg.py {kg_folder} --fix --summary-only
 ```
 
-Parse the JSON output. The script returns:
-- `findings[]` — array of issues with `check_id`, `severity`, `message`, `node_id`, `details`, `fixable`
-- `semantic_check_candidates` — pre-computed data for Phase 3
+Parse the JSON output. With `--summary-only`, the script returns:
 - `summary` — counts of errors, warnings, info, fixable, fixed
+- `semantic_check_candidates` — pre-computed data for Phase 3
+
+(The `findings[]` array is omitted to save tokens. If you need per-finding details — e.g., to list specific issues for the user — re-run without `--summary-only`.)
 
 ### Report structural results immediately
 
-Group findings by severity and present them:
+Report the counts from the `summary` object:
+
+```
+Structural: {errors} errors, {warnings} warnings, {info} info.
+```
+
+If `--fix` was used, report what was auto-fixed: "Auto-fixed: N issues."
+
+If there are errors and the user needs to see specifics, re-run the script without `--summary-only` and group findings by severity:
 
 **Errors** (must fix):
 - List each error with its check_id and message.
@@ -66,8 +75,6 @@ Group findings by severity and present them:
 
 **Info** (suggestions):
 - List each info finding briefly.
-
-If `--fix` was used, report what was auto-fixed: "Auto-fixed: N issues (stats_drift: X, ledger_drift: Y)."
 
 If there are structural errors and `--deep` was NOT specified, recommend: "Found N structural errors. Consider fixing them with --fix before running --deep semantic checks."
 
@@ -152,7 +159,11 @@ Recommend running /build-kg in UPDATE mode to incorporate newer evidence.
 
 ### Write lint report
 
-Write `_lint_report.json` to the KG folder. This file is overwritten on each run (it's a point-in-time snapshot):
+Write `_lint_report.json` to the KG folder. This file is overwritten on each run (it's a point-in-time snapshot). The `findings` array requires per-finding detail. If the summary shows errors or warnings, run:
+```bash
+python3 scripts/lint_kg.py {kg_folder}
+```
+(without `--summary-only`) and use its `findings` array for the report. If the summary shows zero errors and zero warnings, set `findings` to `[]`.
 
 ```json
 {

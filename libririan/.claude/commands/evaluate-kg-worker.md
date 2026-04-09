@@ -28,11 +28,11 @@ Example invocations:
 ## Step 0: Load Nodes
 
 1. Read `{--kg}/manifest.json` to get the node index.
-2. For each node ID in `--nodes`, parse the corresponding `.md` file using the utility script:
+2. For each node ID in `--nodes`, parse the corresponding `.md` file using the utility script with `--no-body` (the body is not needed for verification):
    ```
-   python3 scripts/parse_node.py {--kg}/nodes/{node_file}
+   python3 scripts/parse_node.py {--kg}/nodes/{node_file} --no-body
    ```
-   The JSON output contains `frontmatter` (dict) and `body` (string). Extract from the frontmatter: `title`, `pubmed_ids`, `external_ids`, `evaluation_status`.
+   The JSON output contains `frontmatter` (dict) only. Extract from the frontmatter: `title`, `pubmed_ids`, `external_ids`, `evaluation_status`.
 3. Report: "Evaluating N nodes in KG_Name."
 
 ---
@@ -116,7 +116,7 @@ For NCT and ChEMBL references, apply the same logic: does the trial/compound dat
 For failed nodes:
 1. Search PubMed again with the node's specific claim as the query. Use the same priority chain: try `mcp__plugin_pubmed_PubMed__search_articles`, then `mcp__claude_ai_PubMed__search_articles`, then fall back to E-utilities via curl (`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={QUERY}&retmax=5&retmode=json`).
 2. If a better-matching article is found, substitute the reference ID in the node file and re-verify (repeat Steps E1-E3 for the new PMID).
-3. If remediation fails, mark `evaluation_status: "failed"` and add a `> [!warning]` callout in the markdown body explaining the issue.
+3. If remediation fails, mark `evaluation_status: "failed"` and add a `> [!warning]` callout in the markdown body explaining the issue. Since Step 0 used `--no-body`, read the full node file (via the Read tool) before inserting the callout.
 
 ---
 

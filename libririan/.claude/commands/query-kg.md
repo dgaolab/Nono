@@ -46,7 +46,7 @@ Collect the list of manifest paths for Phase 2.
 Run the search script to rank all nodes by relevance to the query:
 
 ```bash
-python3 scripts/search_nodes.py "{query}" {manifest_path_1} [{manifest_path_2} ...] --top {top_value}
+python3 scripts/search_nodes.py "{query}" {manifest_path_1} [{manifest_path_2} ...] --top {top_value} --compact
 ```
 
 If `--evidence-min` was specified, add: `--evidence-min {tier}`

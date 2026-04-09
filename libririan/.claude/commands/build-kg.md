@@ -95,7 +95,7 @@ Use your judgment. When in doubt, prefer the tier above (broader) to avoid missi
 
 **Step 1** — Break the user's topic into sub-queries (count per tier above). For example, for "mRNA vaccine mechanisms": "mRNA vaccine immune response", "lipid nanoparticle mRNA delivery", "mRNA vaccine spike protein translation", "mRNA vaccine adjuvant innate immunity".
 
-**Step 2** — For each sub-query, call `mcp__plugin_pubmed_PubMed__search_articles` with `max_results` set per tier, sorted by relevance. Pass `since_date` as `date_from` and set `datetype: "edat"` (entry date).
+**Step 2** — Fire all sub-query `search_articles` calls **in parallel** (batch up to 5 concurrent calls). For each sub-query, call `mcp__plugin_pubmed_PubMed__search_articles` with `max_results` set per tier, sorted by relevance. Pass `since_date` as `date_from` and set `datetype: "edat"` (entry date).
 
 **Step 3** — Collect all returned PMIDs and deduplicate. Also exclude any PMIDs already tracked in the PMID ledger:
 ```
@@ -108,7 +108,7 @@ Remove any returned PMIDs from the candidate set. (In a fresh BUILD the ledger i
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded.json
 ```
 
-**Step 4** — For the top N most relevant PMIDs (per tier), call `mcp__plugin_pubmed_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
+**Step 4** — Batch `get_article_metadata` calls **in parallel, up to 5 at a time**. For the top N most relevant PMIDs (per tier), call `mcp__plugin_pubmed_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
 
 **Step 4b — Cache metadata.** Retain all metadata retrieved in this step as a working mapping of `PMID → {title, abstract, authors, journal, year, publication_type}`. This cache persists through Phases 2-3 and is used by Phase 3 Step E1 to avoid redundant API calls.
 
@@ -117,7 +117,7 @@ python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_metadata.json
 ```
 
-**Step 5** — For the most important articles (count per tier; those most central to the topic), call `mcp__plugin_pubmed_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
+**Step 5** — Batch `get_full_text_article` calls **in parallel, up to 5 at a time**. For the most important articles (count per tier; those most central to the topic), call `mcp__plugin_pubmed_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
 
 **Step 6** — Optionally call `mcp__plugin_pubmed_PubMed__find_related_articles` on the top seed PMIDs (count per tier) to discover additional relevant literature not found in the initial search.
 
@@ -145,7 +145,7 @@ Record these as the gap-fill focus areas.
 | **Medium** | 3-5 | 3 | 2 |
 | **Broad** | 5-7 | 4 | 3 |
 
-**Step 4: Recent track.** Use the same facet decomposition as the original BUILD. For each sub-query, call `search_articles` with `date_from` = `since_date`, `datetype: "edat"`, and `max_results` per tier.
+**Step 4: Recent track.** Use the same facet decomposition as the original BUILD. Fire all sub-query `search_articles` calls **in parallel** (batch up to 5 concurrent calls). For each sub-query, call `search_articles` with `date_from` = `since_date`, `datetype: "edat"`, and `max_results` per tier.
 
 **Step 5: Gap-fill track.** Craft queries that target the weak spots identified in Step 2. These queries MUST differ from the original BUILD queries — use:
 - Alternative terms, synonyms, or MeSH headings for the same concepts
@@ -153,7 +153,7 @@ Record these as the gap-fill focus areas.
 - No `date_from` — search the full 5-year window
 - Same `max_results` per tier as the Recent track
 
-**Step 6: Merge and dedup.** Combine PMIDs from both tracks and remove any PMID already in `known_pmids`. The remaining novel PMIDs proceed to metadata and full-text retrieval (counts per tier table, unchanged).
+**Step 6: Merge and dedup.** Combine PMIDs from both tracks and remove any PMID already in `known_pmids`. The remaining novel PMIDs proceed to metadata and full-text retrieval (counts per tier table, unchanged). Batch `get_article_metadata` calls **in parallel, up to 5 at a time**.
 
 **Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `journal`, `year`, and `tier`. Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
 ```
@@ -282,7 +282,7 @@ After the user confirms, proceed to Phase 2.
    | Protein | UniProt entry name if known | SCN1A_HUMAN |
    | Disease | OMIM or Orphanet ID if recognizable | Dravet syndrome (OMIM:607208) |
 
-   Store in the node frontmatter `entities` array. This is best-effort — apply your biomedical knowledge to normalize, but prefix uncertain normalizations with `?` on the `normalized_id` (e.g., `"?HGNC:12345"`). Entities enable cross-KG linking (Phase F) and structured queries.
+   Store in the node frontmatter `entities` array. This is best-effort — apply your biomedical knowledge to normalize, but prefix uncertain normalizations with `?` on the `normalized_id` (e.g., `"?HGNC:12345"`). Entities enable cross-KG linking (via `/link-kg`) and structured queries.
 
 4. **Assign references**: For each node, identify which PMIDs, NCT IDs, and/or ChEMBL IDs from the gathered material support it. **Every node MUST have at least one verifiable reference** (PMID, NCT ID, or ChEMBL ID). Prefer PubMed-backed nodes when possible — nodes backed exclusively by ClinicalTrials.gov or ChEMBL data are valid but should be the exception. For each reference on a node, write a specific `supports` statement describing what it contributes to this node's claim.
 

@@ -640,6 +640,8 @@ def main():
                         help="Comma-separated list of check IDs to run (default: all)")
     parser.add_argument("--fix", action="store_true",
                         help="Auto-fix simple issues (stats, ledger drift)")
+    parser.add_argument("--summary-only", action="store_true",
+                        help="Omit individual findings, return only summary and semantic candidates")
     args = parser.parse_args()
 
     min_severity = SEVERITY_RANK[args.severity]
@@ -675,9 +677,10 @@ def main():
             "fixable": sum(1 for f in findings if f["fixable"]),
             "fixed": linter.fixed_count,
         },
-        "findings": findings,
         "semantic_check_candidates": semantic,
     }
+    if not args.summary_only:
+        output["findings"] = findings
 
     json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
     print()

@@ -2,10 +2,11 @@
 """Parse a KG node .md file and output its frontmatter + body as JSON.
 
 Usage:
-    python3 scripts/parse_node.py <node_path> [--field <dotted.path>]
+    python3 scripts/parse_node.py <node_path> [--field <dotted.path>] [--no-body]
 
 Examples:
     python3 scripts/parse_node.py KG_X/nodes/node_001_foo.md
+    python3 scripts/parse_node.py KG_X/nodes/node_001_foo.md --no-body
     python3 scripts/parse_node.py KG_X/nodes/node_001_foo.md --field evaluation_status
     python3 scripts/parse_node.py KG_X/nodes/node_001_foo.md --field pubmed_ids.0.pmid
 """
@@ -45,6 +46,8 @@ def main():
     parser = argparse.ArgumentParser(description="Parse a KG node .md file to JSON.")
     parser.add_argument("node_path", help="Path to the node .md file")
     parser.add_argument("--field", help="Extract a single frontmatter field (dotted path)")
+    parser.add_argument("--no-body", action="store_true",
+                        help="Return only frontmatter, omit body")
     args = parser.parse_args()
 
     try:
@@ -62,6 +65,9 @@ def main():
     if args.field:
         value = _resolve_field(frontmatter, args.field)
         json.dump(value, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    elif args.no_body:
+        json.dump({"frontmatter": frontmatter}, sys.stdout, ensure_ascii=False, indent=2)
         print()
     else:
         result = {"frontmatter": frontmatter, "body": body}
