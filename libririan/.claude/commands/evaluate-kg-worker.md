@@ -62,8 +62,7 @@ If `clinicaltrials` is in `--sources` and the node has NCT IDs in `external_ids`
 Try the following priority chain for each NCT ID:
 
 1. **MCP (preferred):** Call `mcp__plugin_clinical-trials_ClinicalTrials__get_trial_details` to confirm the trial exists and is relevant to the node's claim.
-2. **MCP (alternate):** Call `mcp__claude_ai_ClinicalTrials__get_trial_details`.
-3. **curl fallback:** If neither MCP tool is available:
+2. **curl fallback:** If the MCP tool is not available:
    ```bash
    curl -s "https://clinicaltrials.gov/api/v2/studies/{NCT_ID}"
    ```

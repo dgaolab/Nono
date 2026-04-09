@@ -290,6 +290,8 @@ def main():
         print()
         sys.exit(0)
 
+    total_before_filter = len(all_nodes)
+
     # Pre-filter by evidence tier
     if min_tier_rank > 0:
         all_nodes = [(kg, n) for kg, n in all_nodes
@@ -373,7 +375,7 @@ def main():
             "entity_ids_matched": sorted(entity_ids_matched),
         },
         "summary": {
-            "total_scanned": len(all_nodes),
+            "total_scanned": total_before_filter,
             "matched": total_matched,
         },
     }

@@ -41,7 +41,7 @@ def main():
     # Find all node .md files
     node_files = sorted(glob.glob(os.path.join(kg_folder, "nodes", "*.md")))
 
-    # Collect statistics from node files
+    # Collect statistics from node files (single pass)
     total_nodes = 0
     all_pmids: set[str] = set()
     all_nct_ids: set[str] = set()
@@ -49,6 +49,7 @@ def main():
     eval_passed = 0
     eval_failed = 0
     tier_distribution: dict[str, int] = {}
+    node_fm_by_id: dict[str, dict] = {}
 
     for node_file in node_files:
         try:
@@ -58,6 +59,11 @@ def main():
             continue
 
         total_nodes += 1
+
+        # Index by node ID for manifest sync
+        node_id = fm.get("id")
+        if node_id:
+            node_fm_by_id[node_id] = fm
 
         # PMIDs
         for entry in fm.get("pubmed_ids", []):
@@ -86,15 +92,6 @@ def main():
         tier_distribution[tier] = tier_distribution.get(tier, 0) + 1
 
     # Sync per-node evaluation_status and evidence_tier from node files into manifest
-    node_fm_by_id: dict[str, dict] = {}
-    for node_file in node_files:
-        try:
-            fm, _ = parse(node_file)
-            node_id = fm.get("id")
-            if node_id:
-                node_fm_by_id[node_id] = fm
-        except Exception:
-            pass
 
     for manifest_node in manifest.get("nodes", []):
         node_id = manifest_node.get("id")

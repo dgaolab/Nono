@@ -19,7 +19,7 @@ import tempfile
 from datetime import datetime, timezone
 
 
-VALID_OPS = {"build", "update", "evaluate", "link", "query", "lint"}
+VALID_OPS = {"build", "update", "evaluate", "link", "query", "lint", "schedule"}
 
 
 def main():

@@ -43,9 +43,9 @@
           "description": "Cron expression for the schedule"
         },
         "last_run": {
-          "type": "string",
+          "type": ["string", "null"],
           "format": "date-time",
-          "description": "ISO timestamp of the last scheduled run"
+          "description": "ISO timestamp of the last scheduled run (null before first run)"
         },
         "trigger_name": {
           "type": "string",

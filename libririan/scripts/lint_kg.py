@@ -211,15 +211,13 @@ class KGLinter:
             abs_disk = os.path.abspath(disk_file)
             if abs_disk not in manifest_files:
                 rel = os.path.relpath(disk_file, self.kg_folder)
-                # Try to get the node ID from frontmatter
-                fm_nid = self.node_fm.get(None)  # won't match, parse below
-                for nid, fm in self.node_fm.items():
-                    # Check if this fm came from this disk file
-                    expected = os.path.join(self.kg_folder, "nodes",
-                                           os.path.basename(disk_file))
-                    if os.path.abspath(expected) == abs_disk:
-                        fm_nid = nid
-                        break
+                # Get the node ID from the orphan file's frontmatter
+                fm_nid = None
+                try:
+                    orphan_fm, _ = parse(disk_file)
+                    fm_nid = orphan_fm.get("id")
+                except Exception:
+                    pass
                 self._add("file_manifest_drift", "error",
                           f"File {rel} exists on disk but is not in manifest",
                           node_id=fm_nid if isinstance(fm_nid, str) else None,
@@ -564,6 +562,66 @@ class KGLinter:
                       file=sys.stderr)
             else:
                 print(f"Warning: ledger sync failed: {result.stderr}", file=sys.stderr)
+
+        # Fix file_manifest_drift: add orphan node files to manifest
+        drift_findings = [f for f in self.findings
+                          if f["check_id"] == "file_manifest_drift" and f["fixable"]
+                          and f.get("details", {}).get("direction") == "file_missing_from_manifest"]
+        if drift_findings:
+            manifest_path = os.path.join(self.kg_folder, "manifest.json")
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as fh:
+                    manifest = json.load(fh)
+                added = 0
+                for finding in drift_findings:
+                    rel_file = finding.get("details", {}).get("file", "")
+                    abs_file = os.path.join(self.kg_folder, rel_file)
+                    if not os.path.exists(abs_file):
+                        continue
+                    try:
+                        fm, _ = parse(abs_file)
+                    except Exception:
+                        continue
+                    node_id = fm.get("id")
+                    if not node_id:
+                        continue
+                    # Skip if already in manifest (shouldn't happen, but be safe)
+                    existing_ids = {n.get("id") for n in manifest.get("nodes", [])}
+                    if node_id in existing_ids:
+                        continue
+                    pmids = []
+                    for entry in fm.get("pubmed_ids", []):
+                        pmid = entry.get("pmid") if isinstance(entry, dict) else str(entry)
+                        if pmid:
+                            pmids.append(str(pmid))
+                    manifest.setdefault("nodes", []).append({
+                        "id": node_id,
+                        "title": fm.get("title", ""),
+                        "file": rel_file,
+                        "tags": fm.get("tags", []),
+                        "summary": "",
+                        "keywords": [],
+                        "pubmed_ids": pmids,
+                        "evaluation_status": fm.get("evaluation_status", "pending"),
+                        "evidence_tier": fm.get("evidence_tier", "unclassified"),
+                    })
+                    added += 1
+                if added > 0:
+                    fd, tmp_path = tempfile.mkstemp(
+                        dir=self.kg_folder, suffix=".json.tmp")
+                    try:
+                        with os.fdopen(fd, "w", encoding="utf-8") as tmp_fh:
+                            json.dump(manifest, tmp_fh, indent=2, ensure_ascii=False)
+                            tmp_fh.write("\n")
+                        os.replace(tmp_path, manifest_path)
+                    except Exception:
+                        os.unlink(tmp_path)
+                        raise
+                    fixed += added
+                    print(f"Fixed: file_manifest_drift ({added} orphan nodes added to manifest)",
+                          file=sys.stderr)
+            except Exception as e:
+                print(f"Warning: file_manifest_drift fix failed: {e}", file=sys.stderr)
 
         self.fixed_count = fixed
 

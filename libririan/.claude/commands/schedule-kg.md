@@ -74,7 +74,7 @@ Next run: <estimated next run time>
 
 Log the operation:
 ```
-python3 scripts/append_log.py {KG_FOLDER} --op build --summary "Schedule created: {trigger_name}, cron: {cron_expression}."
+python3 scripts/append_log.py {KG_FOLDER} --op schedule --summary "Schedule created: {trigger_name}, cron: {cron_expression}."
 ```
 
 ---
@@ -114,7 +114,7 @@ The KG will no longer be updated automatically.
 
 Log the operation:
 ```
-python3 scripts/append_log.py {KG_FOLDER} --op build --summary "Schedule removed: {trigger_name}."
+python3 scripts/append_log.py {KG_FOLDER} --op schedule --summary "Schedule removed: {trigger_name}."
 ```
 
 ---

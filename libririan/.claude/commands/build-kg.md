@@ -95,7 +95,7 @@ Use your judgment. When in doubt, prefer the tier above (broader) to avoid missi
 
 **Step 1** — Break the user's topic into sub-queries (count per tier above). For example, for "mRNA vaccine mechanisms": "mRNA vaccine immune response", "lipid nanoparticle mRNA delivery", "mRNA vaccine spike protein translation", "mRNA vaccine adjuvant innate immunity".
 
-**Step 2** — For each sub-query, call `mcp__claude_ai_PubMed__search_articles` with `max_results` set per tier, sorted by relevance. Pass `since_date` as `date_from` (converting `YYYY-MM-DD` → `YYYY/MM/DD`) and set `datetype: "edat"` (entry date).
+**Step 2** — For each sub-query, call `mcp__plugin_pubmed_PubMed__search_articles` with `max_results` set per tier, sorted by relevance. Pass `since_date` as `date_from` and set `datetype: "edat"` (entry date).
 
 **Step 3** — Collect all returned PMIDs and deduplicate. Also exclude any PMIDs already tracked in the PMID ledger:
 ```
@@ -108,7 +108,7 @@ Remove any returned PMIDs from the candidate set. (In a fresh BUILD the ledger i
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded.json
 ```
 
-**Step 4** — For the top N most relevant PMIDs (per tier), call `mcp__claude_ai_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
+**Step 4** — For the top N most relevant PMIDs (per tier), call `mcp__plugin_pubmed_PubMed__get_article_metadata` to get titles, abstracts, authors, journal, year.
 
 **Step 4b — Cache metadata.** Retain all metadata retrieved in this step as a working mapping of `PMID → {title, abstract, authors, journal, year, publication_type}`. This cache persists through Phases 2-3 and is used by Phase 3 Step E1 to avoid redundant API calls.
 
@@ -117,9 +117,9 @@ python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_metadata.json
 ```
 
-**Step 5** — For the most important articles (count per tier; those most central to the topic), call `mcp__claude_ai_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
+**Step 5** — For the most important articles (count per tier; those most central to the topic), call `mcp__plugin_pubmed_PubMed__get_full_text_article` to get deeper content — but only if a PMC ID is available in the metadata.
 
-**Step 6** — Optionally call `mcp__claude_ai_PubMed__find_related_articles` on the top seed PMIDs (count per tier) to discover additional relevant literature not found in the initial search.
+**Step 6** — Optionally call `mcp__plugin_pubmed_PubMed__find_related_articles` on the top seed PMIDs (count per tier) to discover additional relevant literature not found in the initial search.
 
 #### If UPDATE mode (two-track search):
 

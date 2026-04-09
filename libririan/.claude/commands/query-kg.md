@@ -7,7 +7,7 @@ You answer questions against one or more knowledge graphs by searching for relev
 Parse `$ARGUMENTS` for:
 - **query** (required): The question to answer. First positional argument, quoted.
 - **--kg <folder>** (optional): Specific KG folder to search. If omitted, scan the current directory for all `KG_*` folders and search all of them.
-- **--augment** (optional flag): Enable external source augmentation (PubMed, bioRxiv, OpenTargets, ClinicalTrials.gov, ChEMBL). Default: off.
+- **--augment** (optional flag): Enable external source augmentation (PubMed, bioRxiv, ClinicalTrials.gov, ChEMBL). Default: off.
 - **--file** (optional flag): After answering, file the answer as a new synthesis node in the KG.
 - **--top <N>** (optional): Max number of nodes to read in full. Default: 10.
 - **--evidence-min <tier>** (optional): Minimum evidence tier to include (e.g., `--evidence-min cohort` excludes case_report, review, opinion). Default: no filter.
@@ -107,10 +107,6 @@ Always include PubMed and bioRxiv.
 ### bioRxiv (always)
 1. Call `mcp__plugin_biorxiv_bioRxiv__search_preprints` with the query, limited to the last 6 months.
 2. Note up to 3 relevant preprints. **Flag them explicitly as not peer-reviewed.**
-
-### OpenTargets (if query mentions genes, diseases, or drugs)
-1. Call `mcp__plugin_open-targets_OpenTargets__search_entities` with gene/disease/drug names extracted from the query.
-2. If relevant associations are found, call `mcp__plugin_open-targets_OpenTargets__query_open_targets_graphql` for association scores and evidence.
 
 ### ClinicalTrials.gov (if routed)
 1. Call `mcp__plugin_clinical-trials_ClinicalTrials__search_trials` with condition/intervention from the query.
@@ -292,7 +288,7 @@ Print a terminal summary:
 === Query Complete ===
 KG(s): KG_X, KG_Y
 Nodes consulted: 5 (3 direct, 2 context hops)
-Augmented: yes (PubMed: 3, bioRxiv: 1, OpenTargets: 1)
+Augmented: yes (PubMed: 3, bioRxiv: 1)
 Filed as: node_025 in KG_X (or: not filed)
 ```
 

@@ -113,7 +113,7 @@ def serialize(frontmatter: dict, body: str) -> str:
     )
     # Ensure body is separated from frontmatter by exactly one newline
     if body and not body.startswith("\n"):
-        return f"---\n{yaml_text}---\n{body}"
+        return f"---\n{yaml_text}---\n\n{body}"
     return f"---\n{yaml_text}---\n{body}"
 
 
