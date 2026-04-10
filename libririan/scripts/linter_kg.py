@@ -2,7 +2,7 @@
 """Structural health checks for a knowledge graph.
 
 Usage:
-    python3 scripts/lint_kg.py <kg_folder> [--severity error|warning|info] \
+    python3 scripts/linter_kg.py <kg_folder> [--severity error|warning|info] \
         [--checks check1,check2,...] [--fix]
 
 Runs 10 structural checks and pre-computes semantic check candidates

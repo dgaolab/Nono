@@ -12,10 +12,10 @@ Parse `$ARGUMENTS` for:
 
 Example invocations:
 ```
-/lint-kg KG_SCN1A_Epilepsy
-/lint-kg KG_mRNA_Vaccines --fix
-/lint-kg --deep --stale-check
-/lint-kg KG_CRISPR --fix --deep
+/linter-kg KG_SCN1A_Epilepsy
+/linter-kg KG_mRNA_Vaccines --fix
+/linter-kg --deep --stale-check
+/linter-kg KG_CRISPR --fix --deep
 ```
 
 If `--stale-check` is given without `--deep`, warn the user and enable `--deep` automatically.
@@ -41,12 +41,12 @@ If `--stale-check` is given without `--deep`, warn the user and enable `--deep` 
 Run the automated checks via the Python script. Use `--summary-only` to reduce output (omits the per-finding details array):
 
 ```bash
-python3 scripts/lint_kg.py {kg_folder} --summary-only
+python3 scripts/linter_kg.py {kg_folder} --summary-only
 ```
 
 If `--fix` was specified, add the `--fix` flag:
 ```bash
-python3 scripts/lint_kg.py {kg_folder} --fix --summary-only
+python3 scripts/linter_kg.py {kg_folder} --fix --summary-only
 ```
 
 Parse the JSON output. With `--summary-only`, the script returns:
@@ -161,7 +161,7 @@ Recommend running /build-kg in UPDATE mode to incorporate newer evidence.
 
 Write `_lint_report.json` to the KG folder. This file is overwritten on each run (it's a point-in-time snapshot). The `findings` array requires per-finding detail. If the summary shows errors or warnings, run:
 ```bash
-python3 scripts/lint_kg.py {kg_folder}
+python3 scripts/linter_kg.py {kg_folder}
 ```
 (without `--summary-only`) and use its `findings` array for the report. If the summary shows zero errors and zero warnings, set `findings` to `[]`.
 
