@@ -43,7 +43,7 @@ def main():
     chunk_files = sorted(glob.glob(pattern), key=_chunk_sort_key)
 
     if not chunk_files:
-        result = {"merged": 0, "from_chunks": 0, "total_entries": 0}
+        result = {"entries_processed": 0, "from_chunks": 0, "total_entries": 0}
         json.dump(result, sys.stdout, indent=2)
         print()
         return
@@ -66,7 +66,7 @@ def main():
             sys.exit(1)
 
     # Merge chunks in order (later chunks overwrite earlier for same node_id)
-    merged_count = 0
+    entries_processed = 0
     for chunk_path in chunk_files:
         try:
             with open(chunk_path, "r", encoding="utf-8") as fh:
@@ -85,7 +85,7 @@ def main():
                 print(f"Error: entry without node_id in {chunk_path}", file=sys.stderr)
                 sys.exit(1)
             entries[node_id] = entry
-            merged_count += 1
+            entries_processed += 1
 
     # Sort by node_id for deterministic output
     sorted_entries = sorted(entries.values(), key=lambda e: e.get("node_id", ""))
@@ -114,7 +114,7 @@ def main():
                 print(f"Warning: could not delete {chunk_path}: {e}", file=sys.stderr)
 
     result = {
-        "merged": merged_count,
+        "entries_processed": entries_processed,
         "from_chunks": len(chunk_files),
         "total_entries": len(sorted_entries),
     }

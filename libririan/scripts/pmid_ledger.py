@@ -371,9 +371,11 @@ def cmd_query(args):
 
 def cmd_stats(args):
     ledger = _load_ledger(args.kg_folder)
-    ledger["statistics"] = _recompute_stats(ledger)
-    _write_ledger(args.kg_folder, ledger)
-    json.dump(ledger["statistics"], sys.stdout, indent=2)
+    new_stats = _recompute_stats(ledger)
+    if ledger.get("statistics") != new_stats:
+        ledger["statistics"] = new_stats
+        _write_ledger(args.kg_folder, ledger)
+    json.dump(new_stats, sys.stdout, indent=2)
     print()
 
 

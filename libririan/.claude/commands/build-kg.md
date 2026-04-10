@@ -112,7 +112,7 @@ python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded
 
 **Step 4b — Cache metadata.** Retain all metadata retrieved in this step as a working mapping of `PMID → {title, abstract, authors, journal, year, publication_type}`. This cache persists through Phases 2-3 and is used by Phase 3 Step E1 to avoid redundant API calls.
 
-**Step 4c — Persist metadata to ledger.** For every PMID whose metadata was just retrieved, prepare a batch-add JSON file. Each entry should include: `"disposition": "used"`, `"title"`, `"journal"`, `"year"`, and `"tier"` (from the evidence tier classification). Run:
+**Step 4c — Persist metadata to ledger.** For every PMID whose metadata was just retrieved, prepare a batch-add JSON file. Each entry should include: `"disposition": "used"`, `"title"`, `"journal"`, and `"year"`. Run:
 ```
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_metadata.json
 ```
@@ -155,7 +155,7 @@ Record these as the gap-fill focus areas. Quarantined nodes should be prioritize
 
 **Step 6: Merge and dedup.** Combine PMIDs from both tracks and remove any PMID already in `known_pmids`. The remaining novel PMIDs proceed to metadata and full-text retrieval (counts per tier table, unchanged). Batch `get_article_metadata` calls **in parallel, up to 5 at a time**.
 
-**Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `journal`, `year`, and `tier`. Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
+**Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `journal`, and `year`. Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
 ```
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_update_batch.json
 ```
@@ -286,31 +286,15 @@ After the user confirms, proceed to Phase 2.
 
 4. **Assign references**: For each node, identify which PMIDs, NCT IDs, and/or ChEMBL IDs from the gathered material support it. **Every node MUST have at least one verifiable reference** (PMID, NCT ID, or ChEMBL ID). Prefer PubMed-backed nodes when possible — nodes backed exclusively by ClinicalTrials.gov or ChEMBL data are valid but should be the exception. For each reference on a node, write a specific `supports` statement describing what it contributes to this node's claim.
 
-4b. **Evidence tier classification (MANDATORY — do NOT skip).** For each PMID assigned to a node, classify it into an evidence tier based on metadata from the Phase 1b Step 4b cache (article title, abstract, publication type). Scan the title and publication type for the keyword indicators below:
-
-   | Tier | Label | Score | Indicators in title or publication type |
-   |------|-------|-------|-----------------------------------------|
-   | 1 | `meta_analysis` | 7 | "meta-analysis", "systematic review" |
-   | 2 | `rct` | 6 | "randomized", "RCT", "clinical trial", "controlled trial" |
-   | 3 | `cohort` | 5 | "cohort", "longitudinal", "prospective", "retrospective" |
-   | 4 | `case_series` | 4 | "case series", reports on N > 2 patients |
-   | 5 | `case_report` | 3 | "case report" |
-   | 6 | `review` | 2 | "review" in publication type (not systematic) |
-   | 7 | `opinion` | 1 | "editorial", "letter", "comment", "opinion", "perspective" |
-
-   If none of the indicators match, assign `unclassified`. Store the per-PMID tier in the node frontmatter (`evidence_tier` field on each PMID entry). Assign each node a top-level `evidence_tier` equal to the highest-scoring tier among its PMIDs. Update manifest `statistics.evidence_tier_distribution` with node counts per tier.
-
-   **Check yourself**: If every PMID is ending up as `unclassified`, you are likely not scanning the cached titles/abstracts for the keyword indicators above. Most research articles will match at least one tier — pure `unclassified` should be rare (e.g., methodology papers, bioinformatics tool descriptions).
-
-4c. **Update ledger assignments.** After all nodes have been assigned their references and evidence tiers, update the PMID ledger:
-   1. For each PMID assigned to a node, prepare a batch entry with `disposition: "used"`, the `node` field set to the assigned node ID, and `evidence_tier` set to the tier classified in Step 4b.
+4b. **Update ledger assignments.** After all nodes have been assigned their references, update the PMID ledger:
+   1. For each PMID assigned to a node, prepare a batch entry with `disposition: "used"` and the `node` field set to the assigned node ID.
    2. For PMIDs that were metadata-fetched (in the Phase 1b Step 4b cache) but NOT assigned to any node, prepare entries with `disposition: "irrelevant"` and `notes: "metadata-fetched but not assigned to any node"`.
    3. Run:
       ```
       python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_assignments.json
       ```
 
-5. **Write node files**: For each node, create a `.md` file in the `nodes/` subdirectory. Use the evidence tiers classified in Step 4b — both the per-PMID `evidence_tier` and the node-level `evidence_tier` must reflect the classification, NOT default to `unclassified`. Follow this format:
+5. **Write node files**: For each node, create a `.md` file in the `nodes/` subdirectory. Leave `evidence_tier` fields as `"unclassified"` — they will be set by the classification script in Step 5b. Follow this format:
 
 ```yaml
 ---
@@ -372,6 +356,12 @@ Longer explanation with nuance.
 
 Omit the "Clinical Trials" and "Compound Data" subsections if the node has no references of that type.
 
+5b. **Classify evidence tiers.** Run the deterministic classification script to assign evidence tiers to all nodes based on PMID title metadata from the ledger:
+    ```
+    python3 scripts/classify_evidence_tier.py {KG_FOLDER} --update-ledger
+    ```
+    This scans article titles for study-type keywords (meta-analysis, RCT, cohort, etc.) and sets both per-PMID and node-level `evidence_tier` fields. It also updates `manifest.json` statistics.
+
 6. **Write manifest.json**: Create the Tier 1 index with all nodes, edges, summaries, keywords, and statistics. Follow the schema at `schemas/graph_schema.json`. The `summary` field should be exactly one sentence. The `keywords` field should contain 3-8 search terms that would help match this node to future queries.
 
 7. **Write _index.md**: Create the Obsidian-compatible overview with `[[wikilinks]]` to all nodes, organized by category, with a mermaid graph diagram showing the relationships. Apply these mermaid scaling rules:
@@ -410,6 +400,11 @@ Omit the "Clinical Trials" and "Compound Data" subsections if the node has no re
    - Never delete existing nodes during an update — only add or augment
    - Mark each touched node with today's date in `updated`
 5. **Update manifest.json**: Merge new entries, increment `version`, update `statistics`
+5b. **Classify evidence tiers.** Run the deterministic classification script to assign evidence tiers to all nodes based on PMID title metadata from the ledger:
+    ```
+    python3 scripts/classify_evidence_tier.py {KG_FOLDER} --update-ledger
+    ```
+    This scans article titles for study-type keywords (meta-analysis, RCT, cohort, etc.) and sets both per-PMID and node-level `evidence_tier` fields. It also updates `manifest.json` statistics.
 6. **Update _index.md**: Add new nodes to the appropriate categories
 
 Track which nodes are "newly added or modified" — these go to Phase 3.
