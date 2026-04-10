@@ -6,7 +6,7 @@ You run structural and semantic health checks on a knowledge graph to identify d
 
 Parse `$ARGUMENTS` for:
 - **kg_folder** (optional): Path to the KG folder to lint. If omitted, scan the current directory for `KG_*` folders and prompt the user to select one or lint all.
-- **--fix** (optional flag): Auto-fix simple structural issues (stats drift, ledger drift, file-manifest drift).
+- **--fix** (optional flag): Auto-fix simple structural issues (stats drift, ledger drift, file-manifest drift, quarantine drift).
 - **--deep** (optional flag): Enable LLM-based semantic checks (potential contradictions, entity gaps, missing cross-references, stale claims). Without this, only structural checks run.
 - **--stale-check** (optional flag): Search PubMed for newer evidence on nodes flagged as potentially stale. Requires `--deep`.
 
@@ -236,7 +236,7 @@ Report: _lint_report.json
 
 1. **Structural checks are always run.** They are fast and automated. Never skip them.
 2. **Semantic checks require `--deep`** and are more expensive (node file reads + optional PubMed calls). They are opt-in.
-3. **`--fix` only auto-fixes deterministic issues**: stats recomputation, ledger sync, adding orphan files to manifest. It never deletes nodes, removes edges, or modifies node content.
+3. **`--fix` only auto-fixes deterministic issues**: stats recomputation, ledger sync, adding orphan files to manifest, and quarantine drift (quarantining nodes with `evaluation_status: "failed"`). It never deletes nodes, removes edges, or modifies node content.
 4. **Semantic findings are suggestions**, not commands. Present them as recommendations with reasoning, not as automated fixes.
 5. **Cap stale-check PubMed calls at 5** to avoid excessive API usage.
 6. **`_lint_report.json` is overwritten each run.** For historical tracking, users have `_log.md` and git history.

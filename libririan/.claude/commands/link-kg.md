@@ -26,6 +26,8 @@ Build the three cross-reference indices by running the utility script:
 python3 scripts/build_cross_indices.py {kg_folder_1} {kg_folder_2} [...]
 ```
 
+**Quarantine filtering**: The script excludes quarantined nodes (`quarantined: true`) by default, preventing low-confidence claims from propagating across KGs. If a quarantined node is later un-quarantined, running `/link-kg` again will discover its cross-KG links.
+
 The script outputs a JSON object with three indices:
 
 ### Index A: `shared_references` (strongest signal)

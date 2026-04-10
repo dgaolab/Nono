@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 
 def _chunk_sort_key(path: str) -> int:
@@ -89,10 +90,20 @@ def main():
     # Sort by node_id for deterministic output
     sorted_entries = sorted(entries.values(), key=lambda e: e.get("node_id", ""))
 
-    # Write merged log
-    with open(log_path, "w", encoding="utf-8") as fh:
-        json.dump(sorted_entries, fh, ensure_ascii=False, indent=2)
-        fh.write("\n")
+    # Write merged log (atomic)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=os.path.dirname(log_path), suffix=".json.tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_fh:
+            json.dump(sorted_entries, tmp_fh, ensure_ascii=False, indent=2)
+            tmp_fh.write("\n")
+        os.replace(tmp_path, log_path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
     # Cleanup chunk files
     if args.cleanup:

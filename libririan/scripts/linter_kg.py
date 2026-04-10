@@ -47,6 +47,7 @@ class KGLinter:
         "stats_drift",
         "ledger_drift",
         "evaluation_gaps",
+        "quarantine_drift",
         "evidence_tier_imbalance",
         "tag_coverage_gaps",
         "duplicate_entities",
@@ -231,7 +232,7 @@ class KGLinter:
     def check_stats_drift(self):
         stats = self.manifest.get("statistics", {})
 
-        computed_nodes = len(self.disk_files)
+        computed_nodes = len(self.node_fm)
         computed_edges = len(self.edges)
 
         # Unique PMIDs from node frontmatter
@@ -264,6 +265,23 @@ class KGLinter:
             drift_fields.append(("evaluation_passed", stats.get("evaluation_passed"), eval_passed))
         if stats.get("evaluation_failed") != eval_failed:
             drift_fields.append(("evaluation_failed", stats.get("evaluation_failed"), eval_failed))
+
+        # Evidence tier distribution
+        manifest_tier_dist = stats.get("evidence_tier_distribution")
+        if manifest_tier_dist is not None and dict(tier_dist) != manifest_tier_dist:
+            drift_fields.append(("evidence_tier_distribution",
+                                 manifest_tier_dist, dict(tier_dist)))
+
+        # Quarantine stats
+        computed_quarantined = sum(1 for fm in self.node_fm.values()
+                                   if fm.get("quarantined", False))
+        if (stats.get("quarantined_nodes") is not None
+                and stats.get("quarantined_nodes") != computed_quarantined):
+            drift_fields.append(("quarantined_nodes", stats.get("quarantined_nodes"), computed_quarantined))
+        computed_active = computed_nodes - computed_quarantined
+        if (stats.get("active_nodes") is not None
+                and stats.get("active_nodes") != computed_active):
+            drift_fields.append(("active_nodes", stats.get("active_nodes"), computed_active))
 
         for field, manifest_val, computed_val in drift_fields:
             self._add("stats_drift", "warning",
@@ -328,6 +346,37 @@ class KGLinter:
                   f"{len(pending)}/{total} nodes ({ratio:.0%}) still pending evaluation",
                   details={"pending_nodes": pending, "pending_count": len(pending),
                            "total_count": total, "ratio": round(ratio, 3)})
+
+    # ------------------------------------------------------------------
+    # Check 7b: Quarantine drift
+    # ------------------------------------------------------------------
+    def check_quarantine_drift(self):
+        failed_not_quarantined = []
+        quarantined_not_failed = []
+
+        for nid, node in self.manifest_nodes.items():
+            eval_status = node.get("evaluation_status", "pending")
+            is_quarantined = node.get("quarantined", False)
+
+            if eval_status == "failed" and not is_quarantined:
+                failed_not_quarantined.append(nid)
+            elif is_quarantined and eval_status != "failed":
+                quarantined_not_failed.append(nid)
+
+        if failed_not_quarantined:
+            self._add("quarantine_drift", "warning",
+                      f"{len(failed_not_quarantined)} node(s) failed evaluation but are not quarantined: "
+                      f"{', '.join(sorted(failed_not_quarantined))}",
+                      details={"failed_not_quarantined": sorted(failed_not_quarantined),
+                               "count": len(failed_not_quarantined)},
+                      fixable=True)
+
+        if quarantined_not_failed:
+            self._add("quarantine_drift", "info",
+                      f"{len(quarantined_not_failed)} node(s) are quarantined but evaluation_status is not 'failed': "
+                      f"{', '.join(sorted(quarantined_not_failed))}",
+                      details={"quarantined_not_failed": sorted(quarantined_not_failed),
+                               "count": len(quarantined_not_failed)})
 
     # ------------------------------------------------------------------
     # Check 8: Evidence tier imbalance
@@ -615,13 +664,84 @@ class KGLinter:
                             tmp_fh.write("\n")
                         os.replace(tmp_path, manifest_path)
                     except Exception:
-                        os.unlink(tmp_path)
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
                         raise
                     fixed += added
                     print(f"Fixed: file_manifest_drift ({added} orphan nodes added to manifest)",
                           file=sys.stderr)
             except Exception as e:
                 print(f"Warning: file_manifest_drift fix failed: {e}", file=sys.stderr)
+
+        # Fix quarantine_drift: quarantine failed-but-not-quarantined nodes
+        qd_findings = [f for f in self.findings
+                        if f["check_id"] == "quarantine_drift" and f["fixable"]]
+        if qd_findings:
+            failed_nodes = []
+            for f in qd_findings:
+                failed_nodes.extend(f.get("details", {}).get("failed_not_quarantined", []))
+
+            if failed_nodes:
+                fm_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                          "update_frontmatter.py")
+                fix_count = 0
+                for nid in failed_nodes:
+                    node_entry = self.manifest_nodes.get(nid, {})
+                    node_file = node_entry.get("file", "")
+                    if not node_file:
+                        continue
+                    full_path = os.path.join(self.kg_folder, node_file)
+                    if not os.path.exists(full_path):
+                        continue
+                    result = subprocess.run(
+                        ["python3", fm_script, full_path, '{"quarantined": true}'],
+                        capture_output=True, text=True)
+                    if result.returncode == 0:
+                        fix_count += 1
+
+                # Update manifest nodes
+                manifest_path = os.path.join(self.kg_folder, "manifest.json")
+                try:
+                    with open(manifest_path, "r", encoding="utf-8") as fh:
+                        manifest = json.load(fh)
+                    failed_set = set(failed_nodes)
+                    for node in manifest.get("nodes", []):
+                        if node.get("id") in failed_set:
+                            node["quarantined"] = True
+                    fd, tmp_path = tempfile.mkstemp(
+                        dir=self.kg_folder, suffix=".json.tmp")
+                    try:
+                        with os.fdopen(fd, "w", encoding="utf-8") as tmp_fh:
+                            json.dump(manifest, tmp_fh, indent=2, ensure_ascii=False)
+                            tmp_fh.write("\n")
+                        os.replace(tmp_path, manifest_path)
+                    except Exception:
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
+                        raise
+
+                    # Recompute stats
+                    stats_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                 "update_manifest_stats.py")
+                    subprocess.run(["python3", stats_script, self.kg_folder],
+                                   capture_output=True, text=True)
+
+                    fixed += fix_count
+                    print(f"Fixed: quarantine_drift ({fix_count} node(s) quarantined)",
+                          file=sys.stderr)
+                except Exception as e:
+                    print(f"Warning: quarantine_drift fix failed: {e}", file=sys.stderr)
+
+        # Final stats recomputation if any non-quarantine fixes touched the manifest
+        if fixed > 0 and not qd_findings:
+            stats_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "update_manifest_stats.py")
+            subprocess.run(["python3", stats_script, self.kg_folder],
+                           capture_output=True, text=True)
 
         self.fixed_count = fixed
 

@@ -194,7 +194,8 @@ def cmd_init(args):
         with open(manifest_path, "r", encoding="utf-8") as fh:
             manifest = json.load(fh)
 
-        kg_name = manifest.get("kg_name", kg_name)
+        if not args.kg_name:
+            kg_name = manifest.get("kg_name", kg_name)
         ledger["kg_name"] = kg_name
         created_date = manifest.get("created", _today_iso())
         now = _now_iso()

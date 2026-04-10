@@ -133,9 +133,9 @@ Store the result as `known_pmids`. This excludes not only PMIDs assigned to node
 
 **Step 2: Identify weak spots.** Scan the existing KG for gap-fill targets:
 - Nodes with only 1 PMID (under-referenced)
-- Nodes with `evaluation_status: "failed"` (unverified claims)
+- Nodes with `evaluation_status: "failed"` or `quarantined: true` (unverified claims — these are the primary un-quarantine candidates)
 - Tags or categories that have fewer nodes than expected for the topic breadth
-Record these as the gap-fill focus areas.
+Record these as the gap-fill focus areas. Quarantined nodes should be prioritized: if gap-fill finds better references, the node can be re-evaluated and un-quarantined.
 
 **Step 3: Allocate sub-query budget.** Split the tier's sub-query count ~60/40 between Recent and Gap-fill:
 
@@ -380,6 +380,18 @@ Omit the "Clinical Trials" and "Compound Data" subsections if the node has no re
    - **50+ nodes**: Render a category-level overview diagram (each category as a single box with node count) plus per-category detail diagrams inside collapsible `<details>` sections.
    See `templates/index_template.md` for examples of each format.
 
+   **Quarantine filtering**: Exclude quarantined nodes (`quarantined: true`) from the category listings and the mermaid diagram. Also exclude edges where either endpoint is quarantined. If any quarantined nodes exist, add a collapsed section at the bottom of `_index.md`:
+   ```markdown
+   <details><summary>Quarantined Nodes ({count})</summary>
+
+   These nodes failed independent verification and are excluded from search and linking.
+   They may be reinstated after UPDATE mode finds better references.
+
+   - ~~[[node_005_slug]]~~ — evaluation failed ({date})
+   - ~~[[node_012_slug]]~~ — evaluation failed ({date})
+   </details>
+   ```
+
 ### If UPDATE mode:
 
 1. **Load existing graph**: Read `manifest.json` and all node `.md` files listed in it.
@@ -436,11 +448,19 @@ Where:
 
 1. Read the `_evaluation_log.json` written by the evaluator.
 2. Read any node files that were modified (remediated or marked as failed).
-3. Ensure manifest statistics are up-to-date by running:
+3. **Quarantine newly failed nodes.** The evaluator already sets `quarantined: true` on nodes that fail (see evaluate-kg-worker Step E4). Verify this by checking node frontmatter. For any node with `evaluation_status: "failed"` that is missing the quarantine flag, set it:
+   ```
+   python3 scripts/update_frontmatter.py {node_path} '{"quarantined": true}'
+   ```
+4. **Un-quarantine newly passed nodes.** For any previously quarantined node that now has `evaluation_status: "passed"` (e.g., after UPDATE mode gap-fill), verify the evaluator set `quarantined: false`. If not, set it:
+   ```
+   python3 scripts/update_frontmatter.py {node_path} '{"quarantined": false}'
+   ```
+5. Ensure manifest statistics are up-to-date by running:
    ```
    python3 scripts/update_manifest_stats.py {KG_FOLDER}
    ```
-4. Report the evaluation results to the user before proceeding to Phase 4.
+6. Report the evaluation results (including quarantine actions) to the user before proceeding to Phase 4.
 
 ---
 
@@ -505,7 +525,8 @@ Mode: BUILD | UPDATE (v2)
 Nodes: 15 created, 3 updated
 References: 28 unique PMIDs (ledger: 85 tracked, 50 irrelevant, 5 failed, 2 superseded)
 Evaluation: 14 passed, 1 failed
-Warnings: [list any failed nodes or issues]
+Quarantined: 1 node (1 newly quarantined, 0 un-quarantined)
+Warnings: [list any failed/quarantined nodes or issues]
 ```
 
 ---

@@ -116,7 +116,7 @@ For NCT and ChEMBL references, apply the same logic: does the trial/compound dat
 For failed nodes:
 1. Search PubMed again with the node's specific claim as the query. Use the same priority chain: try `mcp__plugin_pubmed_PubMed__search_articles`, then `mcp__claude_ai_PubMed__search_articles`, then fall back to E-utilities via curl (`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={QUERY}&retmax=5&retmode=json`).
 2. If a better-matching article is found, substitute the reference ID in the node file and re-verify (repeat Steps E1-E3 for the new PMID).
-3. If remediation fails, mark `evaluation_status: "failed"` and add a `> [!warning]` callout in the markdown body explaining the issue. Since Step 0 used `--no-body`, read the full node file (via the Read tool) before inserting the callout.
+3. If remediation fails, mark `evaluation_status: "failed"` and `quarantined: true`, and add a `> [!warning]` callout in the markdown body explaining the issue. The quarantine flag excludes the node from search results, cross-KG linking, index listings, and mermaid diagrams until better references are found. Since Step 0 used `--no-body`, read the full node file (via the Read tool) before inserting the callout.
 
 ---
 
@@ -163,8 +163,13 @@ python3 scripts/update_frontmatter.py {node_path} '{json_updates}'
 
 Where `{json_updates}` is a JSON object containing the fields to update. For example:
 ```bash
+# Passed evaluation — ensure quarantined is false (un-quarantine on re-eval)
 python3 scripts/update_frontmatter.py KG_X/nodes/node_001_foo.md \
-  '{"evaluation_status": "passed", "pubmed_ids": [{"pmid": "35486828", "verified": true}]}'
+  '{"evaluation_status": "passed", "quarantined": false, "pubmed_ids": [{"pmid": "35486828", "verified": true}]}'
+
+# Failed evaluation — quarantine the node
+python3 scripts/update_frontmatter.py KG_X/nodes/node_001_foo.md \
+  '{"evaluation_status": "failed", "quarantined": true}'
 ```
 
 The script deep-merges the updates into the existing frontmatter — it matches PMID entries by their `pmid` value, so only the `verified` field is changed on matching entries. New entries are appended.

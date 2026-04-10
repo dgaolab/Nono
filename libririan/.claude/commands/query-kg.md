@@ -11,6 +11,7 @@ Parse `$ARGUMENTS` for:
 - **--file** (optional flag): After answering, file the answer as a new synthesis node in the KG.
 - **--top <N>** (optional): Max number of nodes to read in full. Default: 10.
 - **--evidence-min <tier>** (optional): Minimum evidence tier to include (e.g., `--evidence-min cohort` excludes case_report, review, opinion). Default: no filter.
+- **--include-quarantined** (optional flag): Include quarantined (failed evaluation) nodes in search results. Default: off — quarantined nodes are excluded.
 
 Example invocations:
 ```
@@ -18,6 +19,7 @@ Example invocations:
 /query-kg "How do mTOR inhibitors compare to gene therapy for TSC?" --kg KG_TSC
 /query-kg "Latest findings on CRISPR delivery vectors" --augment --file
 /query-kg "Mechanisms of drug resistance in AML" --kg KG_AML --top 15 --evidence-min cohort
+/query-kg "What happened to the retracted claims about X?" --include-quarantined
 ```
 
 If no arguments are provided, ask the user for a question.
@@ -46,8 +48,10 @@ Collect the list of manifest paths for Phase 2.
 Run the search script to rank all nodes by relevance to the query:
 
 ```bash
-python3 scripts/search_nodes.py "{query}" {manifest_path_1} [{manifest_path_2} ...] --top {top_value} --compact
+python3 scripts/search_nodes.py "{query}" {manifest_path_1} [{manifest_path_2} ...] --top {top_value} --compact [--include-quarantined]
 ```
+
+Only add `--include-quarantined` if the user passed that flag. By default, quarantined nodes are excluded from results.
 
 If `--evidence-min` was specified, add: `--evidence-min {tier}`
 
@@ -172,6 +176,7 @@ failed evaluation, weak evidence areas, and potential contradictions.}
 - External PMIDs use standard format: Author et al., Year, *Journal*.
 - bioRxiv preprints always carry a ⚠️ NOT PEER-REVIEWED warning.
 - If all consulted nodes have `evaluation_status: "failed"`, add a prominent warning at the top of the answer.
+- If any consulted node has `quarantined: true` (only possible when `--include-quarantined` was used), add a `> [!caution] Quarantined Evidence` callout before the answer explaining that some consulted nodes failed independent verification and their claims should be treated with extra skepticism.
 
 ### Contradiction handling:
 If consulted nodes have `contradicts` relationships or `> [!debate]` callouts, present both sides fairly. Do not pick one side.
@@ -299,7 +304,7 @@ Filed as: node_025 in KG_X (or: not filed)
 1. **Every citation must be traceable.** Inline `[N]` references must map to a specific node or external source in the Citations section. Never fabricate citation numbers.
 2. **Do not hallucinate reference IDs.** Only use PMIDs from node files or MCP search results. Never invent IDs.
 3. **Distinguish KG content from augmented content.** The answer must clearly separate what came from the knowledge graph vs external searches.
-4. **Respect evaluation status.** If a cited node has `evaluation_status: "failed"`, note this in the Evidence Summary table.
+4. **Respect evaluation and quarantine status.** If a cited node has `evaluation_status: "failed"` or `quarantined: true`, note this in the Evidence Summary table. Quarantined nodes are excluded from search results by default — they only appear when `--include-quarantined` is used.
 5. **bioRxiv preprints must be flagged** as not peer-reviewed every time they are cited.
 6. **Synthesis nodes are regular nodes** with a `synthesis` tag. They participate in future searches, evaluations, and cross-KG linking normally.
 7. **Cap augmentation at 10 MCP calls** to keep response time reasonable.

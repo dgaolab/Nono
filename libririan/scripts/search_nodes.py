@@ -263,6 +263,9 @@ def main():
                         help="Minimum evidence tier to include")
     parser.add_argument("--tag-filter", dest="tag_filter",
                         help="Only include nodes with this tag (case-insensitive)")
+    parser.add_argument("--include-quarantined", dest="include_quarantined",
+                        action="store_true",
+                        help="Include quarantined nodes in results (excluded by default)")
     parser.add_argument("--compact", action="store_true",
                         help="Omit score_breakdown, match details, and query_analysis")
     args = parser.parse_args()
@@ -301,6 +304,11 @@ def main():
         all_nodes = [(kg, n) for kg, n in all_nodes
                      if EVIDENCE_TIER_ORDER.get(n.get("evidence_tier", "unclassified"), 0) >= min_tier_rank]
 
+    # Pre-filter quarantined nodes (default: exclude)
+    if not args.include_quarantined:
+        all_nodes = [(kg, n) for kg, n in all_nodes
+                     if not n.get("quarantined", False)]
+
     # Pre-filter by tag
     if args.tag_filter:
         tag_lower = args.tag_filter.lower()
@@ -335,12 +343,13 @@ def main():
 
         eval_b = EVAL_BONUS if eval_status == "passed" else 0.0
         tier_b = TIER_BONUS.get(tier, 0.0)
+        quarantine_penalty = -0.10 if node.get("quarantined", False) else 0.0
 
         final_score = (W_KEYWORD * kw_score +
                        W_ENTITY * ent_score +
                        W_SUMMARY * sum_score +
                        W_TAG * tag_s +
-                       eval_b + tier_b)
+                       eval_b + tier_b + quarantine_penalty)
 
         if final_score > 0:
             entity_ids_matched.update(matched_ent)
@@ -352,6 +361,7 @@ def main():
                 "score": round(final_score, 4),
                 "evidence_tier": tier,
                 "evaluation_status": eval_status,
+                "quarantined": node.get("quarantined", False),
             }
             if not args.compact:
                 entry["score_breakdown"] = {

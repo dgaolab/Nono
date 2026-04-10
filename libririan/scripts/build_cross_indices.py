@@ -25,6 +25,9 @@ from lib.frontmatter import parse
 def main():
     parser = argparse.ArgumentParser(description="Build cross-reference indices for KG linking.")
     parser.add_argument("kg_folders", nargs="+", help="Paths to KG folders (2 or more)")
+    parser.add_argument("--include-quarantined", dest="include_quarantined",
+                        action="store_true",
+                        help="Include quarantined nodes in cross-reference indices")
     args = parser.parse_args()
 
     if len(args.kg_folders) < 2:
@@ -50,6 +53,8 @@ def main():
         kg_name = manifest.get("kg_name", os.path.basename(kg_folder))
 
         for node_entry in manifest.get("nodes", []):
+            if not args.include_quarantined and node_entry.get("quarantined", False):
+                continue
             node_id = node_entry.get("id", "")
             node_file = node_entry.get("file", "")
             full_path = os.path.join(kg_folder, node_file) if node_file else ""

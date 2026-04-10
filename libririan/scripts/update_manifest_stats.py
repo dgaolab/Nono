@@ -15,6 +15,7 @@ import glob
 import json
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib.frontmatter import parse
@@ -48,6 +49,7 @@ def main():
     all_chembl_ids: set[str] = set()
     eval_passed = 0
     eval_failed = 0
+    quarantined_count = 0
     tier_distribution: dict[str, int] = {}
     node_fm_by_id: dict[str, dict] = {}
 
@@ -87,6 +89,10 @@ def main():
         elif eval_status == "failed":
             eval_failed += 1
 
+        # Quarantine status
+        if fm.get("quarantined", False):
+            quarantined_count += 1
+
         # Evidence tier
         tier = fm.get("evidence_tier", "unclassified")
         tier_distribution[tier] = tier_distribution.get(tier, 0) + 1
@@ -101,6 +107,8 @@ def main():
                 manifest_node["evaluation_status"] = fm["evaluation_status"]
             if "evidence_tier" in fm:
                 manifest_node["evidence_tier"] = fm["evidence_tier"]
+            if "quarantined" in fm:
+                manifest_node["quarantined"] = fm["quarantined"]
 
     # Edge count from manifest (edges are authoritative in manifest, not in node files)
     total_edges = len(manifest.get("edges", []))
@@ -114,6 +122,8 @@ def main():
         "evidence_tier_distribution": tier_distribution,
         "total_nct_ids": len(all_nct_ids),
         "total_chembl_ids": len(all_chembl_ids),
+        "quarantined_nodes": quarantined_count,
+        "active_nodes": total_nodes - quarantined_count,
     }
 
     # Include PMID ledger stats if ledger exists
@@ -133,9 +143,19 @@ def main():
         print()
     else:
         manifest["statistics"] = stats
-        with open(manifest_path, "w", encoding="utf-8") as fh:
-            json.dump(manifest, fh, ensure_ascii=False, indent=2)
-            fh.write("\n")
+        fd, tmp_path = tempfile.mkstemp(
+            dir=os.path.dirname(manifest_path), suffix=".json.tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_fh:
+                json.dump(manifest, tmp_fh, ensure_ascii=False, indent=2)
+                tmp_fh.write("\n")
+            os.replace(tmp_path, manifest_path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
         json.dump(stats, sys.stdout, indent=2)
         print()
 
