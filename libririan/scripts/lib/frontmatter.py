@@ -111,6 +111,7 @@ def serialize(frontmatter: dict, body: str) -> str:
         allow_unicode=True,
         width=120,
     )
+    body = body or ""
     # Ensure body is separated from frontmatter by exactly one newline
     if body and not body.startswith("\n"):
         return f"---\n{yaml_text}---\n\n{body}"
@@ -130,7 +131,11 @@ def write(file_path: str, frontmatter: dict, body: str) -> None:
             fh.write(content)
         os.replace(tmp_path, file_path)
     except Exception:
-        # Clean up temp file on failure
+        # Close fd if os.fdopen() failed before the with-block took ownership
+        try:
+            os.close(fd)
+        except OSError:
+            pass
         try:
             os.unlink(tmp_path)
         except OSError:

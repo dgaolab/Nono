@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import glob
 import json
 import os
@@ -291,6 +292,15 @@ def main():
             if pmid_str in entries:
                 entries[pmid_str]["evidence_tier"] = tier_label
         ledger_data["version"] = ledger_data.get("version", 0) + 1
+        ledger_data["updated"] = datetime.date.today().isoformat()
+        # Recompute statistics to keep them in sync with updated entries
+        counts: dict[str, int] = {"used": 0, "irrelevant": 0, "failed": 0, "superseded": 0}
+        for entry in ledger_data.get("entries", {}).values():
+            disp = entry.get("disposition", "")
+            if disp in counts:
+                counts[disp] += 1
+        counts["total"] = sum(counts.values())
+        ledger_data["statistics"] = counts
         fd, tmp_path = tempfile.mkstemp(
             dir=os.path.dirname(ledger_path), suffix=".json.tmp")
         try:
@@ -299,6 +309,10 @@ def main():
                 fh.write("\n")
             os.replace(tmp_path, ledger_path)
         except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
             try:
                 os.unlink(tmp_path)
             except OSError:

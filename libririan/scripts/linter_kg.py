@@ -587,7 +587,7 @@ class KGLinter:
             script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                   "update_manifest_stats.py")
             result = subprocess.run(
-                ["python3", script, self.kg_folder],
+                [sys.executable, script, self.kg_folder],
                 capture_output=True, text=True)
             if result.returncode == 0:
                 fixed += len(stats_findings)
@@ -603,7 +603,7 @@ class KGLinter:
             script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                   "pmid_ledger.py")
             result = subprocess.run(
-                ["python3", script, "sync", self.kg_folder],
+                [sys.executable, script, "sync", self.kg_folder],
                 capture_output=True, text=True)
             if result.returncode == 0:
                 fixed += len(ledger_findings)
@@ -648,8 +648,8 @@ class KGLinter:
                         "title": fm.get("title", ""),
                         "file": rel_file,
                         "tags": fm.get("tags", []),
-                        "summary": "",
-                        "keywords": [],
+                        "summary": fm.get("summary", ""),
+                        "keywords": fm.get("tags", []),
                         "pubmed_ids": pmids,
                         "evaluation_status": fm.get("evaluation_status", "pending"),
                         "evidence_tier": fm.get("evidence_tier", "unclassified"),
@@ -664,6 +664,10 @@ class KGLinter:
                             tmp_fh.write("\n")
                         os.replace(tmp_path, manifest_path)
                     except Exception:
+                        try:
+                            os.close(fd)
+                        except OSError:
+                            pass
                         try:
                             os.unlink(tmp_path)
                         except OSError:
@@ -696,7 +700,7 @@ class KGLinter:
                     if not os.path.exists(full_path):
                         continue
                     result = subprocess.run(
-                        ["python3", fm_script, full_path, '{"quarantined": true}'],
+                        [sys.executable, fm_script, full_path, '{"quarantined": true}'],
                         capture_output=True, text=True)
                     if result.returncode == 0:
                         fix_count += 1
@@ -719,6 +723,10 @@ class KGLinter:
                         os.replace(tmp_path, manifest_path)
                     except Exception:
                         try:
+                            os.close(fd)
+                        except OSError:
+                            pass
+                        try:
                             os.unlink(tmp_path)
                         except OSError:
                             pass
@@ -727,7 +735,7 @@ class KGLinter:
                     # Recompute stats
                     stats_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                  "update_manifest_stats.py")
-                    subprocess.run(["python3", stats_script, self.kg_folder],
+                    subprocess.run([sys.executable, stats_script, self.kg_folder],
                                    capture_output=True, text=True)
 
                     fixed += fix_count
@@ -740,7 +748,7 @@ class KGLinter:
         if fixed > 0 and not qd_findings:
             stats_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                          "update_manifest_stats.py")
-            subprocess.run(["python3", stats_script, self.kg_folder],
+            subprocess.run([sys.executable, stats_script, self.kg_folder],
                            capture_output=True, text=True)
 
         self.fixed_count = fixed

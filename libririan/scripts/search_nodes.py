@@ -130,16 +130,21 @@ def score_keywords(query_tokens: list[str], node_keywords: list[str]) -> tuple[f
     kw_lower = [kw.lower() for kw in node_keywords]
     matched = []
     match_weight = 0.0
+    matched_kw_indices: set[int] = set()
 
     for qt in query_tokens:
         for i, kw in enumerate(kw_lower):
+            if i in matched_kw_indices:
+                continue
             if qt == kw:
                 match_weight += 1.0
                 matched.append(node_keywords[i])
+                matched_kw_indices.add(i)
                 break
             elif qt in kw or kw in qt:
                 match_weight += 0.5
                 matched.append(node_keywords[i])
+                matched_kw_indices.add(i)
                 break
 
     union_size = len(set(query_tokens) | set(kw_lower))

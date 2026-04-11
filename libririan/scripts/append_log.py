@@ -65,6 +65,10 @@ def main():
         os.replace(tmp_path, log_path)
     except Exception:
         try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
             os.unlink(tmp_path)
         except OSError:
             pass

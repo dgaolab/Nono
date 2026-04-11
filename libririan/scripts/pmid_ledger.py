@@ -92,6 +92,10 @@ def _write_ledger(kg_folder: str, ledger: dict) -> None:
         os.replace(tmp_path, path)
     except Exception:
         try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
             os.unlink(tmp_path)
         except OSError:
             pass

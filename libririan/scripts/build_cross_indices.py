@@ -60,8 +60,10 @@ def main():
             full_path = os.path.join(kg_folder, node_file) if node_file else ""
 
             # Collect references from manifest (flat PMID list)
-            for pmid in node_entry.get("pubmed_ids", []):
-                ref_index[str(pmid)].append({"kg": kg_name, "node_id": node_id})
+            for entry in node_entry.get("pubmed_ids", []):
+                pmid = entry.get("pmid") if isinstance(entry, dict) else str(entry)
+                if pmid:
+                    ref_index[str(pmid)].append({"kg": kg_name, "node_id": node_id})
 
             # Collect external IDs from manifest
             for ext in node_entry.get("external_ids", []):
