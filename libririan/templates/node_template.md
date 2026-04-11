@@ -43,7 +43,7 @@ Longer explanation with nuance. Can include multiple paragraphs covering the mec
 ## Evidence
 
 ### Literature
-- **PMID XXXXXXXX** (Author et al., Year, *Journal Name*) `[unclassified]`: Specific finding from this paper that supports the claim.
+- **PMID XXXXXXXX** (Author et al., Year, *Journal Name*): Specific finding from this paper that supports the claim.
 
 ### Clinical Trials
 <!-- Include this section only if the node has ClinicalTrials.gov references -->

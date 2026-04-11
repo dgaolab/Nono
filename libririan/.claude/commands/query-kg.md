@@ -240,7 +240,7 @@ evaluation_status: "pending"
 ## Evidence
 
 ### Literature
-{PMIDs inherited from source nodes, with inline evidence tier tags.}
+{PMIDs inherited from source nodes.}
 
 ## Synthesis Provenance
 
