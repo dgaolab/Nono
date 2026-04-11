@@ -1,3 +1,6 @@
 libririan/demands.txt
 libririan/blueprint.txt
 libririan/scripts/__pycache__
+libririan/scripts/lib/__pycache__
+libririan/tests/output
+
