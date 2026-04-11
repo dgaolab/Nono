@@ -2,5 +2,6 @@
 tests/output/
 
 # Python
+scripts/lib/__pycache__/
 __pycache__/
 *.pyc
