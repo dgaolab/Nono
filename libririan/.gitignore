@@ -1,0 +1,6 @@
+# Test output (regenerated each run)
+tests/output/
+
+# Python
+__pycache__/
+*.pyc

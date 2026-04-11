@@ -1,0 +1,67 @@
+{
+  "test_meta": {
+    "topic": "Role of melatonin in circadian rhythm regulation",
+    "mode": "BUILD",
+    "data_sources": ["pubmed"],
+    "breadth": "narrow"
+  },
+  "node_count": {
+    "min": 3,
+    "max": 5
+  },
+  "pmid_expectations": {
+    "99000001": {
+      "must_be_assigned": true,
+      "expected_tier": "rct",
+      "expected_ledger_disposition": "used",
+      "notes": "On-topic RCT about melatonin and clock genes. Must appear in at least one active node."
+    },
+    "99000002": {
+      "must_be_assigned": true,
+      "expected_tier": "review",
+      "expected_ledger_disposition": "used",
+      "notes": "On-topic review of melatonin in sleep disorders. Must appear in at least one active node."
+    },
+    "99000003": {
+      "must_be_assigned": true,
+      "expected_tier": "unclassified",
+      "expected_ledger_disposition": "used",
+      "notes": "On-topic study of melatonin biosynthesis. publication_types=['Journal Article'] hits PUBTYPE_IGNORE, title has no tier keywords -> unclassified."
+    },
+    "99000004": {
+      "must_be_assigned": false,
+      "expected_tier": "meta_analysis",
+      "expected_ledger_disposition": "irrelevant_or_failed",
+      "quarantine_if_assigned": true,
+      "notes": "Off-topic (omega-3/cardiovascular). If assigned to a node, that node must be quarantined. Ideally not assigned at all."
+    },
+    "99000005": {
+      "may_be_assigned": true,
+      "expected_tier": "opinion",
+      "expected_ledger_disposition": "used_or_irrelevant",
+      "notes": "Vaguely connected editorial about light and hormones. Mentions melatonin but is primarily about public health. Assignment is acceptable but not required."
+    }
+  },
+  "evaluation": {
+    "all_nodes_evaluated": true,
+    "no_pending_evaluation_status": true,
+    "evaluation_log_exists": true
+  },
+  "structural": {
+    "manifest_schema_valid": true,
+    "ledger_schema_valid": true,
+    "all_nodes_have_at_least_one_reference": true,
+    "all_edges_reference_existing_nodes": true,
+    "required_files": [
+      "manifest.json",
+      "_index.md",
+      "_pmid_ledger.json",
+      "_evaluation_log.json",
+      "_log.md"
+    ]
+  },
+  "ledger": {
+    "total_pmids_tracked": 5,
+    "all_mock_pmids_present": ["99000001", "99000002", "99000003", "99000004", "99000005"]
+  }
+}

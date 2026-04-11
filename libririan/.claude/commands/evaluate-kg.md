@@ -12,10 +12,12 @@ Parse `$ARGUMENTS` for:
 - **--kg <folder>** (required): Path to the KG folder to evaluate.
 - **--nodes <id1,id2,...>** (required): Comma-separated list of node IDs to evaluate (e.g., `node_001,node_005,node_012`).
 - **--sources <source1,source2,...>** (optional): Active data sources used when building this KG (e.g., `pubmed,clinicaltrials,chembl`). Defaults to `pubmed`.
+- **--test** (optional flag): Run in test mode using mock PubMed fixtures. When set, pass `--test` through to all `/evaluate-kg-worker` invocations so workers read from `tests/fixtures/` instead of calling MCP tools.
 
-Example invocation:
+Example invocations:
 ```
 /evaluate-kg --kg KG_SCN1A_Epilepsy --nodes node_001,node_002,node_003 --sources pubmed,clinicaltrials
+/evaluate-kg --kg tests/output/KG_Melatonin_Circadian --nodes node_001,node_002,node_003 --sources pubmed --test
 ```
 
 ---
@@ -33,7 +35,7 @@ Example invocation:
 ## Step 1: Dispatch Strategy
 
 **If N <= 5** — Direct evaluation (no parallelization overhead):
-- Invoke `/evaluate-kg-worker` with the same `--kg`, `--nodes`, and `--sources` arguments. Do NOT pass `--chunk-id`.
+- Invoke `/evaluate-kg-worker` with the same `--kg`, `--nodes`, and `--sources` arguments. Do NOT pass `--chunk-id`. **If `--test` was passed, include `--test` in the worker invocation.**
 - The worker handles everything: evaluation, writing `_evaluation_log.json`, updating node files, and updating manifest statistics.
 - Skip to Step 6 (Report) after the worker completes.
 
@@ -64,12 +66,12 @@ Process one wave at a time. For each wave:
 
 For every chunk in the current wave, use the **Agent tool** to spawn a worker agent. Issue **all Agent calls for the wave in a single response** to enable parallel execution.
 
-Each Agent call should use this prompt template (fill in the actual values):
+Each Agent call should use this prompt template (fill in the actual values). **If `--test` was passed, include `--test` in the worker invocation:**
 
 ```
 You are a Knowledge Graph evaluation worker. Invoke the /evaluate-kg-worker skill with these exact arguments:
 
-/evaluate-kg-worker --kg {KG_FOLDER} --nodes {CHUNK_NODE_IDS} --sources {SOURCES} --chunk-id {N}
+/evaluate-kg-worker --kg {KG_FOLDER} --nodes {CHUNK_NODE_IDS} --sources {SOURCES} --chunk-id {N} {--test if test mode}
 
 Wait for the skill to complete. After it finishes, confirm which _eval_chunk_{N}.json file was written and summarize the evaluation results (how many nodes passed, failed, or needed remediation).
 ```
@@ -136,9 +138,16 @@ This re-reads all node `.md` files and recomputes all statistics fields (`total_
 
 ---
 
-## Step 6: Report
+## Step 6: Log and Report
 
-1. Report the final summary:
+**Log first, then report.** The log command must run before any terminal output — otherwise the agent may consider the task complete after printing the summary and never reach the log command.
+
+1. Log the evaluation (**mandatory — execute this before step 2**):
+   ```
+   python3 scripts/append_log.py {--kg} --op evaluate --summary "Evaluated {N} nodes: {X} passed, {Y} failed, {Z} errors. Waves: {W}, Chunks: {C}."
+   ```
+
+2. Report the final summary:
 
 > **Evaluation complete.**
 > - Total nodes evaluated: {N}
@@ -149,11 +158,6 @@ This re-reads all node `.md` files and recomputes all statistics fields (`total_
 > - Chunks: {C}
 
 If any nodes have `overall_status: "error"`, list them explicitly and recommend manual review.
-
-2. Log the evaluation:
-   ```
-   python3 scripts/append_log.py {--kg} --op evaluate --summary "Evaluated {N} nodes: {X} passed, {Y} failed, {Z} errors. Waves: {W}, Chunks: {C}."
-   ```
 
 ---
 

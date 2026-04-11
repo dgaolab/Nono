@@ -22,10 +22,81 @@ from lib.frontmatter import parse, write
 
 
 # ---------------------------------------------------------------------------
-# Tier classification rules — evaluated top-to-bottom, first match wins.
+# Tier classification — two methods, structured PubMed types preferred.
 # ---------------------------------------------------------------------------
 
-TIER_RULES: list[tuple[str, int, list[re.Pattern]]] = [
+# Method 1: PubMed publication_types → tier mapping.
+# PubMed assigns structured type tags like "Randomized Controlled Trial",
+# "Meta-Analysis", "Review", etc.  These are the gold standard.
+# Map each known tag to (tier_label, score).  An article can have multiple
+# tags; the highest-scoring one wins.
+PUBTYPE_MAP: dict[str, tuple[str, int]] = {
+    # meta_analysis (7)
+    "meta-analysis":           ("meta_analysis", 7),
+    "systematic review":       ("meta_analysis", 7),
+    # rct (6)
+    "randomized controlled trial": ("rct", 6),
+    "clinical trial, phase iii":   ("rct", 6),
+    "clinical trial, phase iv":    ("rct", 6),
+    "pragmatic clinical trial":    ("rct", 6),
+    # cohort (5)
+    "observational study":     ("cohort", 5),
+    "cohort study":            ("cohort", 5),   # rare but exists
+    "clinical trial":          ("cohort", 5),
+    "clinical trial, phase i": ("cohort", 5),
+    "clinical trial, phase ii":("cohort", 5),
+    "multicenter study":       ("cohort", 5),
+    "comparative study":       ("cohort", 5),
+    "twin study":              ("cohort", 5),
+    "validation study":        ("cohort", 5),
+    # case_series (4)
+    "clinical study":          ("case_series", 4),
+    "evaluation study":        ("case_series", 4),
+    # case_report (3)
+    "case reports":            ("case_report", 3),
+    # review (2)
+    "review":                  ("review", 2),
+    "scientific integrity review": ("review", 2),
+    # opinion (1)
+    "editorial":               ("opinion", 1),
+    "letter":                  ("opinion", 1),
+    "comment":                 ("opinion", 1),
+    "published erratum":       ("opinion", 1),
+    "personal narrative":      ("opinion", 1),
+}
+
+# Tags to ignore — they describe format, not study design.
+PUBTYPE_IGNORE = {
+    "journal article", "english abstract", "research support, n.i.h., extramural",
+    "research support, n.i.h., intramural", "research support, non-u.s. gov't",
+    "research support, u.s. gov't, non-p.h.s.", "research support, u.s. gov't, p.h.s.",
+    "in vitro", "retracted publication", "preprint",
+}
+
+
+def classify_publication_types(pub_types: list[str]) -> tuple[str, int]:
+    """Classify from PubMed publication_types tags.
+
+    Returns the highest-scoring (tier_label, score) among the tags.
+    Falls back to ("unclassified", 0) if no informative tag matches.
+    """
+    if not pub_types:
+        return ("unclassified", 0)
+
+    best: tuple[str, int] = ("unclassified", 0)
+    for tag in pub_types:
+        normalized = tag.strip().lower()
+        if normalized in PUBTYPE_IGNORE:
+            continue
+        tier = PUBTYPE_MAP.get(normalized)
+        if tier and tier[1] > best[1]:
+            best = tier
+    return best
+
+
+# Method 2: Title regex fallback — same patterns as before, used only when
+# publication_types are unavailable (ledger bootstrapped without metadata).
+TITLE_RULES: list[tuple[str, int, list[re.Pattern]]] = [
     ("meta_analysis", 7, [
         re.compile(r"meta.analysis", re.IGNORECASE),
         re.compile(r"systematic review", re.IGNORECASE),
@@ -63,24 +134,20 @@ TIER_RULES: list[tuple[str, int, list[re.Pattern]]] = [
 # Publication-type tiers describe *what the article is* (a review, an editorial),
 # while study-design tiers describe *what the article studies* (a cohort, an RCT).
 # When both match (e.g., "a review of randomized trials"), the publication type wins.
-PUBLICATION_TYPE_TIERS = {"meta_analysis", "review", "opinion"}
+_PUB_TYPE_TIERS = {"meta_analysis", "review", "opinion"}
 
 
 def classify_title(title: str) -> tuple[str, int]:
-    """Classify a title string into an evidence tier.
+    """Classify a title string into an evidence tier via regex.
 
-    Scans all tier rules and collects matches.  When a title matches both
-    a publication-type tier (review, opinion, meta_analysis) and a study-design
-    tier (rct, cohort, etc.), the publication-type tier wins — because
-    "a review of cohort studies" is a review, not a cohort study.
-
+    Used as a fallback when publication_types are not available.
     Returns (tier_label, score). Falls back to ("unclassified", 0).
     """
     if not title:
         return ("unclassified", 0)
 
     matches: list[tuple[str, int]] = []
-    for label, score, patterns in TIER_RULES:
+    for label, score, patterns in TITLE_RULES:
         for pat in patterns:
             if pat.search(title):
                 matches.append((label, score))
@@ -93,14 +160,24 @@ def classify_title(title: str) -> tuple[str, int]:
         return matches[0]
 
     # Multiple tiers matched — check if both categories are present.
-    pub_type_matches = [(l, s) for l, s in matches if l in PUBLICATION_TYPE_TIERS]
-    study_design_matches = [(l, s) for l, s in matches if l not in PUBLICATION_TYPE_TIERS]
+    pub_type_matches = [(l, s) for l, s in matches if l in _PUB_TYPE_TIERS]
+    study_design_matches = [(l, s) for l, s in matches if l not in _PUB_TYPE_TIERS]
 
     if pub_type_matches and study_design_matches:
         # Publication-type overrides study-design.
         matches = pub_type_matches
 
     return max(matches, key=lambda t: t[1])
+
+
+def classify_pmid(pub_types: list[str] | None, title: str | None) -> tuple[str, int]:
+    """Classify a PMID using publication_types first, title regex as fallback."""
+    if pub_types:
+        result = classify_publication_types(pub_types)
+        if result[0] != "unclassified":
+            return result
+    # Fallback to title regex
+    return classify_title(title or "")
 
 
 def best_tier(pmid_tiers: list[tuple[str, int]]) -> str:
@@ -173,13 +250,14 @@ def main():
             pmid_str = str(pmid)
             ledger_entry = ledger.get(pmid_str, {})
             title = ledger_entry.get("title") if isinstance(ledger_entry, dict) else None
+            pub_types = ledger_entry.get("publication_types") if isinstance(ledger_entry, dict) else None
 
-            if not title:
+            if not title and not pub_types:
                 pmids_no_title += 1
                 node_pmid_tiers.append(("unclassified", 0))
                 continue
 
-            tier_label, tier_score = classify_title(title)
+            tier_label, tier_score = classify_pmid(pub_types, title)
             node_pmid_tiers.append((tier_label, tier_score))
 
             old_tier = entry.get("evidence_tier", "unclassified")

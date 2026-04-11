@@ -111,7 +111,8 @@ def _recompute_stats(ledger: dict) -> dict:
 def _apply_entry(ledger: dict, pmid: str, disposition: str, *,
                  title: str | None = None, journal: str | None = None,
                  year: int | None = None, node: str | None = None,
-                 tier: str | None = None, notes: str | None = None) -> dict | None:
+                 tier: str | None = None, notes: str | None = None,
+                 publication_types: list[str] | None = None) -> dict | None:
     """Add or merge a single PMID entry. Returns the entry, or None on invalid transition."""
     entries = ledger.setdefault("entries", {})
     now = _now_iso()
@@ -136,6 +137,8 @@ def _apply_entry(ledger: dict, pmid: str, disposition: str, *,
             existing["evidence_tier"] = tier
         if notes is not None:
             existing["notes"] = notes
+        if publication_types is not None:
+            existing["publication_types"] = publication_types
         if node and node not in existing.get("assigned_nodes", []):
             existing.setdefault("assigned_nodes", []).append(node)
         return existing
@@ -147,6 +150,7 @@ def _apply_entry(ledger: dict, pmid: str, disposition: str, *,
             "last_checked": now,
             "assigned_nodes": [node] if node else [],
             "evidence_tier": tier,
+            "publication_types": publication_types,
             "journal": journal,
             "year": year,
             "notes": notes or "",
@@ -260,6 +264,7 @@ def cmd_add(args):
         title=args.title, journal=args.journal,
         year=args.year, node=args.node,
         tier=args.tier, notes=args.notes,
+        publication_types=args.publication_types,
     )
     if entry is None:
         sys.exit(1)
@@ -298,6 +303,7 @@ def cmd_batch_add(args):
             node=item.get("node"),
             tier=item.get("tier"),
             notes=item.get("notes"),
+            publication_types=item.get("publication_types"),
         )
         if result is not None:
             if was_new:
@@ -581,6 +587,8 @@ def main():
     p_add.add_argument("--year", type=int)
     p_add.add_argument("--node")
     p_add.add_argument("--tier")
+    p_add.add_argument("--publication-types", nargs="*",
+                       help="PubMed publication type tags (e.g., 'Randomized Controlled Trial')")
     p_add.add_argument("--notes")
 
     # batch-add

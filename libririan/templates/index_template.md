@@ -13,12 +13,14 @@ Brief 2-3 sentence summary of what this knowledge graph covers and its scope.
 
 ## Nodes
 
-### Category 1
-- [[node_001_concept_a]] - Short description
-- [[node_002_concept_b]] - Short description
+### Transcriptomic Methods & Platforms
+- [[node_001_snrnaseq_postmortem]] - snRNA-seq of postmortem CNS tissue revealing cell-type alterations
+- [[node_002_spatial_transcriptomics]] - Spatial transcriptomics preserving anatomical context
+- [[node_003_ipsc_models]] - iPSC-derived motor neuron models for transcriptomic profiling
 
-### Category 2
-- [[node_003_concept_c]] - Short description
+### Cell-Type Specific Alterations
+- [[node_004_motor_neuron_vulnerability]] - Motor neuron selective vulnerability signatures
+- [[node_005_microglial_activation]] - Microglial activation states and disease-associated phenotypes
 
 ## Statistics
 

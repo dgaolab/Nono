@@ -1,0 +1,25 @@
+{
+  "PMC99001": {
+    "pmid": "99000001",
+    "pmc_id": "PMC99001",
+    "title": "A Randomized Controlled Trial of Melatonin on SCN Molecular Clock Gene Expression in Humans",
+    "sections": [
+      {
+        "heading": "Introduction",
+        "text": "The suprachiasmatic nucleus (SCN) serves as the master circadian pacemaker in mammals, coordinating peripheral clocks through neural and humoral signals. Melatonin, synthesized by the pineal gland during darkness, acts on MT1 and MT2 G-protein-coupled receptors in the SCN to modulate circadian phase and amplitude. While rodent studies have demonstrated that melatonin can phase-shift clock gene expression in the SCN, direct evidence for this mechanism in human tissue has been limited to indirect measures such as plasma melatonin profiles and actigraphy-derived phase markers."
+      },
+      {
+        "heading": "Methods",
+        "text": "We conducted a double-blind, placebo-controlled trial using organotypic SCN slice cultures prepared from hypothalamic tissue obtained during neurosurgical procedures (n=48 patients, age 35-62). Cultures were randomized to melatonin (100 pM, approximating physiological nocturnal levels) or vehicle (ethanol 0.0001%) for 6 hours beginning at projected CT14. RNA was extracted using TRIzol and quantitative RT-PCR was performed for BMAL1, CLOCK, PER1, PER2, CRY1, and CRY2 using validated TaqMan assays. MT1 receptor dependence was tested in a subset (n=16) pre-treated with luzindole (1 microM) for 30 minutes before melatonin exposure."
+      },
+      {
+        "heading": "Results",
+        "text": "Melatonin treatment significantly increased PER1 mRNA expression (2.3-fold vs vehicle, p<0.001, 95% CI: 1.8-2.9) and CRY1 expression (1.8-fold, p=0.003, 95% CI: 1.3-2.4) compared to vehicle controls. BMAL1, CLOCK, PER2, and CRY2 expression were not significantly altered (all p>0.15). Pre-treatment with the MT1-selective antagonist luzindole completely abolished both the PER1 response (1.1-fold, p=0.82 vs vehicle) and CRY1 response (1.0-fold, p=0.94), confirming MT1 receptor dependence. No effect of luzindole alone was observed on baseline clock gene expression."
+      },
+      {
+        "heading": "Discussion",
+        "text": "This is the first randomized trial demonstrating that melatonin directly modulates core clock gene transcription in human SCN tissue via MT1 receptor signaling. The selective upregulation of PER1 and CRY1 — both members of the negative limb of the transcription-translation feedback loop (TTFL) — suggests melatonin acts to advance the circadian phase by accelerating the inhibitory arm of the core oscillator. This mechanism is consistent with the phase-response curve for exogenous melatonin in humans, where evening administration advances circadian phase. Our findings have implications for the therapeutic use of melatonin in circadian rhythm disorders, particularly delayed sleep-wake phase disorder where advancing the clock is the therapeutic goal."
+      }
+    ]
+  }
+}

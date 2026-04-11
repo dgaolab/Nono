@@ -13,6 +13,7 @@ Parse `$ARGUMENTS` for:
 - **--nodes <id1,id2,...>** (required): Comma-separated list of node IDs to evaluate (e.g., `node_001,node_005,node_012`).
 - **--sources <source1,source2,...>** (optional): Active data sources used when building this KG (e.g., `pubmed,clinicaltrials,chembl`). Defaults to `pubmed`.
 - **--chunk-id <N>** (optional): If provided, this worker is part of a parallel evaluation. Write results to `_eval_chunk_{N}.json` instead of `_evaluation_log.json`, and skip manifest statistics updates. The orchestrator (`/evaluate-kg`) handles merging and manifest updates.
+- **--test** (optional flag): Run in test mode using mock PubMed fixtures. When set, read article metadata and full text from `tests/fixtures/` instead of calling MCP tools or curl. See "Test Mode" sections in Steps E1, E2, and E4.
 
 Example invocations:
 ```
@@ -21,6 +22,9 @@ Example invocations:
 
 # Chunk evaluation (called by orchestrator)
 /evaluate-kg-worker --kg KG_SCN1A_Epilepsy --nodes node_001,node_002 --sources pubmed --chunk-id 2
+
+# Test mode
+/evaluate-kg-worker --kg tests/output/KG_Melatonin_Circadian --nodes node_001,node_002,node_003 --sources pubmed --test
 ```
 
 ---
@@ -38,6 +42,18 @@ Example invocations:
 ---
 
 ## Step E1: PMID Existence Check
+
+#### Test Mode (if `--test` is set) — replaces the normal MCP/curl priority chain
+
+**Do NOT call any PubMed MCP tools or curl.** Instead:
+
+1. Read `tests/fixtures/mock_pubmed.json` using the Read tool. Parse the JSON into a PMID-to-metadata map.
+2. For each PMID in each node's frontmatter:
+   - If the PMID exists as a key in the fixture JSON → the PMID is **valid**. Record the article title and abstract from the fixture.
+   - If the PMID is NOT in the fixture JSON → the PMID is **invalid**. Flag it.
+3. Continue to Step E2 as normal.
+
+#### Normal Mode (if `--test` is NOT set)
 
 For each PMID in each node's frontmatter, retrieve article metadata using the following **priority chain** — try each method in order and use the first that succeeds:
 
@@ -90,6 +106,17 @@ If the entry does not exist or is unrelated, flag the ChEMBL ID.
 
 ## Step E2: Content Support Verification
 
+#### Test Mode (if `--test` is set) — replaces normal full-text retrieval
+
+**Do NOT call any PubMed MCP tools or curl for full text.** Instead:
+1. Read `tests/fixtures/mock_pubmed_fulltext.json` using the Read tool.
+2. If the PMID's associated PMC ID (from `mock_pubmed.json`) exists as a key in the fulltext fixture → use that full text for verification.
+3. If not → use the abstract from `mock_pubmed.json` only (abstract-level verification).
+
+The verification logic below (comparing claims against article content) is the same in both modes — only the source of article text differs.
+
+#### Normal Mode (if `--test` is NOT set)
+
 For each valid PMID, compare the node's knowledge claim against the article's abstract (and full text if available). To retrieve full text, use the same priority chain as Step E1: try `mcp__plugin_pubmed_PubMed__get_full_text_article`, then `mcp__claude_ai_PubMed__get_full_text_article`, then fall back to the PMC OA API via curl (`https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_json/{PMCID}/unicode`). Full text is optional — abstract-level verification is sufficient if full text is unavailable.
 
 Evaluate:
@@ -112,6 +139,18 @@ For NCT and ChEMBL references, apply the same logic: does the trial/compound dat
 ---
 
 ## Step E4: Remediation
+
+#### Test Mode (if `--test` is set) — replaces the normal PubMed re-search
+
+For failed nodes, **do NOT call any PubMed MCP tools or curl.** Instead:
+1. Read `tests/fixtures/mock_pubmed.json` (if not already loaded from Step E1).
+2. Check whether any OTHER article in the fixture (not already assigned to this node) better supports the node's claim. Evaluate each candidate's abstract against the claim.
+3. If a suitable replacement is found, substitute the reference and re-verify (repeat Steps E1-E3 for the new PMID using fixture data).
+4. If no suitable replacement exists in the fixtures, mark the node as failed and quarantine it (same as normal mode step 3 below).
+
+Then skip to Step E5.
+
+#### Normal Mode (if `--test` is NOT set)
 
 For failed nodes:
 1. Search PubMed again with the node's specific claim as the query. Use the same priority chain: try `mcp__plugin_pubmed_PubMed__search_articles`, then `mcp__claude_ai_PubMed__search_articles`, then fall back to E-utilities via curl (`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={QUERY}&retmax=5&retmode=json`).

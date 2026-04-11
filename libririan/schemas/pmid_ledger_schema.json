@@ -61,6 +61,11 @@
             "enum": ["meta_analysis", "rct", "cohort", "case_series", "case_report", "review", "opinion", "unclassified", null],
             "description": "Evidence tier classification (null if not classified)"
           },
+          "publication_types": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "PubMed publication type tags (e.g., ['Journal Article', 'Randomized Controlled Trial']). Primary source for evidence tier classification. Null if metadata was not retrieved."
+          },
           "journal": {
             "type": ["string", "null"],
             "description": "Journal name (null if metadata was not retrieved)"

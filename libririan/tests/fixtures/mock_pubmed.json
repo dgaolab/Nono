@@ -1,0 +1,68 @@
+{
+  "99000001": {
+    "pmid": "99000001",
+    "title": "A Randomized Controlled Trial of Melatonin on SCN Molecular Clock Gene Expression in Humans",
+    "abstract": "This randomized controlled trial investigated the effect of exogenous melatonin on the expression of core clock genes (BMAL1, CLOCK, PER1, PER2, CRY1) in human suprachiasmatic nucleus organotypic cultures. Melatonin administration at physiological doses (100 pM) significantly upregulated PER1 expression (2.3-fold, p<0.001) and CRY1 expression (1.8-fold, p=0.003) via MT1 receptor signaling, as confirmed by blockade with the MT1 antagonist luzindole. These findings provide direct evidence that melatonin modulates the molecular clockwork through transcriptional regulation of period and cryptochrome genes in the negative limb of the circadian feedback loop.",
+    "authors": [
+      {"first_name": "Maria", "last_name": "Chen"},
+      {"first_name": "James", "last_name": "Wu"},
+      {"first_name": "Sarah", "last_name": "Park"}
+    ],
+    "journal": "Journal of Biological Rhythms",
+    "year": 2024,
+    "publication_types": ["Randomized Controlled Trial", "Journal Article"],
+    "pmc_id": "PMC99001"
+  },
+  "99000002": {
+    "pmid": "99000002",
+    "title": "Melatonin in Sleep Disorders: A Comprehensive Review of Clinical Efficacy and Safety",
+    "abstract": "This review examines the clinical evidence for melatonin use in circadian rhythm sleep-wake disorders, including delayed sleep-wake phase disorder, jet lag, and shift work disorder. Meta-analytic pooling of 23 randomized trials shows melatonin reduces sleep onset latency by 7-12 minutes and improves Pittsburgh Sleep Quality Index scores by 1.2 points on average. Safety profiles are favorable across age groups, with no serious adverse events reported in trials lasting up to 12 months.",
+    "authors": [
+      {"first_name": "Robert", "last_name": "Tanaka"},
+      {"first_name": "Elena", "last_name": "Volkov"}
+    ],
+    "journal": "Sleep Medicine Reviews",
+    "year": 2023,
+    "publication_types": ["Review", "Journal Article"],
+    "pmc_id": null
+  },
+  "99000003": {
+    "pmid": "99000003",
+    "title": "Pineal Melatonin Biosynthesis and Circadian Regulation of the Serotonin N-Acetyltransferase Pathway",
+    "abstract": "This study characterizes the enzymatic pathway from serotonin to melatonin in the pineal gland, focusing on the rate-limiting enzyme arylalkylamine N-acetyltransferase (AANAT). Using phosphoproteomics in rat pineal explants, we demonstrate that AANAT activity is regulated by a circadian-dependent phosphorylation cascade involving cAMP-activated protein kinase A (PKA) and stabilization by 14-3-3 protein binding. These findings clarify the molecular mechanism underlying the nocturnal surge in melatonin synthesis and its entrainment to the light-dark cycle.",
+    "authors": [
+      {"first_name": "David", "last_name": "Klein"},
+      {"first_name": "Ana", "last_name": "Ferreira"},
+      {"first_name": "Tomas", "last_name": "Berg"}
+    ],
+    "journal": "Journal of Pineal Research",
+    "year": 2024,
+    "publication_types": ["Journal Article"],
+    "pmc_id": null
+  },
+  "99000004": {
+    "pmid": "99000004",
+    "title": "Meta-Analysis of Omega-3 Fatty Acid Supplementation on Cardiovascular Mortality: A Systematic Review",
+    "abstract": "This meta-analysis of 14 randomized controlled trials evaluates the effect of omega-3 polyunsaturated fatty acid supplementation on cardiovascular mortality in adults with established coronary heart disease. The pooled risk ratio was 0.92 (95% CI: 0.85-0.99), suggesting a modest but statistically significant reduction in cardiac death with EPA/DHA supplementation at doses exceeding 1 g/day. Heterogeneity was moderate across studies (I-squared = 42%).",
+    "authors": [
+      {"first_name": "Lisa", "last_name": "Nguyen"},
+      {"first_name": "Michael", "last_name": "Okafor"}
+    ],
+    "journal": "The Lancet",
+    "year": 2025,
+    "publication_types": ["Meta-Analysis", "Journal Article"],
+    "pmc_id": null
+  },
+  "99000005": {
+    "pmid": "99000005",
+    "title": "Light Exposure, Hormonal Rhythms, and Modern Health: An Editorial Perspective",
+    "abstract": "Modern lifestyles characterized by ubiquitous artificial light exposure at night have disrupted natural hormonal rhythms, with melatonin suppression being a well-documented consequence. This editorial discusses the downstream implications for metabolic syndrome, immune dysregulation, and cancer risk, drawing on epidemiological data from shift workers and experimental light-at-night protocols. We argue for evidence-based public health interventions targeting light hygiene as a modifiable risk factor.",
+    "authors": [
+      {"first_name": "Patricia", "last_name": "Reiter"}
+    ],
+    "journal": "Nature Reviews Endocrinology",
+    "year": 2024,
+    "publication_types": ["Editorial", "Journal Article"],
+    "pmc_id": null
+  }
+}

@@ -11,6 +11,7 @@ Parse `$ARGUMENTS` for:
 - **--since <date>** (optional): Only search PubMed for articles added on or after this date. Format: `YYYY-MM-DD`. Defaults: in BUILD mode, 5 years before today's date; in UPDATE mode, auto-derived from `manifest.json` (see Phase 0).
 - **--breadth <narrow|medium|broad>** (optional): Override the automatic topic breadth tier classification in Phase 1b Step 0. Use this to force a specific search scale regardless of topic complexity.
 - **--interactive** (optional flag): Pause after Phase 1 (source gathering) to present a summary of gathered material and let the user steer emphasis, depth, and scope before graph construction begins.
+- **--test** (optional flag): Run in **test mode** using mock PubMed fixtures. All PubMed MCP tool calls are replaced by deterministic reads from `tests/fixtures/`. The topic, sub-queries, and search results are fixed. Output is written to `tests/output/KG_Melatonin_Circadian/`. See "Test Mode" sections in each phase for details.
 
 Example invocations:
 ```
@@ -19,9 +20,10 @@ Example invocations:
 /build-kg "mRNA vaccine mechanisms" --output KG_mRNA_Vaccines --since 2026-03-01
 /build-kg "sodium channels" --breadth broad
 /build-kg "sodium channels" --interactive
+/build-kg --test
 ```
 
-If no arguments are provided, ask the user for a topic.
+If no arguments are provided and `--test` is not set, ask the user for a topic.
 
 ---
 
@@ -55,6 +57,26 @@ After determining mode and resolving `since_date`, initialize or load the persis
 - **BUILD mode**: Run `python3 scripts/pmid_ledger.py init {KG_FOLDER} --kg-name {KG_NAME}` to create an empty `_pmid_ledger.json`. The `--kg-name` flag ensures the ledger's `kg_name` matches the manifest even when the folder basename differs (e.g., `--output /tmp/test` with `kg_name: KG_Foo`).
 - **UPDATE mode**: Check if `_pmid_ledger.json` exists in the KG folder. If it does not (legacy KG created before ledger support), run `python3 scripts/pmid_ledger.py init {KG_FOLDER}` to bootstrap the ledger from `manifest.json` — this will import all existing PMIDs as `disposition: "used"`.
 
+### Test Mode Override (if `--test` is set)
+
+If `--test` is present, **override all Phase 0 decisions** with these fixed values — ignore any other arguments except `--test` itself:
+
+- `topic` = `"Role of melatonin in circadian rhythm regulation"`
+- `mode` = **BUILD** (always — delete and recreate any prior test output)
+- `output` folder = `tests/output/KG_Melatonin_Circadian/`
+- `kg_name` = `KG_Melatonin_Circadian`
+- `since_date` = `"2020/01/01"`
+- `breadth` = `narrow`
+- `active_sources` = `["pubmed"]`
+- `--interactive` is **off** (never pause in test mode)
+
+Steps:
+1. Delete `tests/output/KG_Melatonin_Circadian/` if it exists (clean slate).
+2. Create `tests/output/KG_Melatonin_Circadian/` and `tests/output/KG_Melatonin_Circadian/nodes/`.
+3. Initialize the ledger normally: `python3 scripts/pmid_ledger.py init tests/output/KG_Melatonin_Circadian --kg-name KG_Melatonin_Circadian`
+
+Then proceed to Phase 1 with these fixed values.
+
 ---
 
 ## Phase 1: Source Gathering
@@ -67,6 +89,8 @@ After determining mode and resolving `since_date`, initialize or load the persis
 
 ### 1a-bis. Source routing (always performed)
 
+**If `--test` is set:** Skip source routing entirely. `active_sources` is already fixed to `["pubmed"]` from Phase 0. Jump directly to Phase 1b.
+
 Classify the topic to determine which data sources to query beyond PubMed. Evaluate the topic against these signals:
 
 | Signal in topic | Additional source | MCP tools |
@@ -78,6 +102,33 @@ Classify the topic to determine which data sources to query beyond PubMed. Evalu
 A topic can activate both additional sources. Store the result as `active_sources` (always includes `"pubmed"`; conditionally includes `"clinicaltrials"` and/or `"chembl"`). If `--source` was provided, also include `"user_provided"`. Record `active_sources` in `manifest.json` under the `data_sources` field.
 
 ### 1b. PubMed research (always performed)
+
+#### Test Mode (if `--test` is set) — replaces ALL of Phase 1b
+
+**Do NOT call any PubMed MCP tools.** Instead, read mock fixtures from disk. This section replaces Steps 0-6 entirely.
+
+**Step 1 (test)** — Use these two fixed sub-queries (do not generate your own):
+1. `"melatonin circadian rhythm molecular mechanism"`
+2. `"melatonin sleep disorder treatment"`
+
+**Step 2 (test)** — Read `tests/fixtures/mock_search_results.json` using the Read tool. Parse the JSON. For each sub-query, extract its `pmids` array. These replace what `search_articles` would return.
+
+**Step 3 (test)** — Deduplicate the PMIDs across both queries. The result should be 5 unique PMIDs: `99000001, 99000002, 99000003, 99000004, 99000005`.
+
+**Step 4 (test)** — Read `tests/fixtures/mock_pubmed.json` using the Read tool. Parse the JSON. For each PMID in the deduplicated set, extract its full metadata (title, abstract, authors, journal, year, publication_types, pmc_id). Cache all metadata in memory exactly as you would in normal mode — this cache is used in Phase 2 and Phase 3.
+
+**Step 4b-4c (test)** — Persist metadata to the ledger using the real script — this is NOT mocked. Write a batch-add JSON file to `/tmp/pmid_test_batch.json` with all 5 PMIDs, each with `disposition: "used"`, `title`, `journal`, `year`, and `publication_types` from the fixture. Then run:
+```
+python3 scripts/pmid_ledger.py batch-add tests/output/KG_Melatonin_Circadian --input /tmp/pmid_test_batch.json
+```
+
+**Step 5 (test)** — Read `tests/fixtures/mock_pubmed_fulltext.json` using the Read tool. Only PMID 99000001 (PMC99001) has full text. For all other articles, note that full text is unavailable — use abstract only.
+
+**Step 6 (test)** — Skip `find_related_articles` entirely. No related articles in test mode.
+
+After completing these test steps, skip Phases 1c, 1d, and 1e. Proceed directly to Phase 2.
+
+---
 
 **Step 0 — Assess topic breadth and set search scale:**
 
@@ -112,7 +163,7 @@ python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded
 
 **Step 4b — Cache metadata.** Retain all metadata retrieved in this step as a working mapping of `PMID → {title, abstract, authors, journal, year, publication_type}`. This cache persists through Phases 2-3 and is used by Phase 3 Step E1 to avoid redundant API calls.
 
-**Step 4c — Persist metadata to ledger.** For every PMID whose metadata was just retrieved, prepare a batch-add JSON file. Each entry should include: `"disposition": "used"`, `"title"`, `"journal"`, and `"year"`. Run:
+**Step 4c — Persist metadata to ledger.** For every PMID whose metadata was just retrieved, prepare a batch-add JSON file. Each entry **must** include: `"disposition": "used"`, `"title"`, `"journal"`, `"year"`, and `"publication_types"` (the list of PubMed publication type tags, e.g., `["Journal Article", "Randomized Controlled Trial"]`). The `publication_types` field is critical — it is the primary input for evidence tier classification. Run:
 ```
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_metadata.json
 ```
@@ -155,7 +206,7 @@ Record these as the gap-fill focus areas. Quarantined nodes should be prioritize
 
 **Step 6: Merge and dedup.** Combine PMIDs from both tracks and remove any PMID already in `known_pmids`. The remaining novel PMIDs proceed to metadata and full-text retrieval (counts per tier table, unchanged). Batch `get_article_metadata` calls **in parallel, up to 5 at a time**.
 
-**Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `journal`, and `year`. Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
+**Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `journal`, `year`, and `publication_types` (the list of PubMed publication type tags — critical for evidence tier classification). Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
 ```
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_update_batch.json
 ```
@@ -259,6 +310,9 @@ After the user confirms, proceed to Phase 2.
    - Not so coarse that it covers an entire subfield
    - Roughly the level of a single "finding", "mechanism", "definition", or "therapeutic approach"
    - Scale with the breadth tier from Phase 1b: Narrow ~8-15 nodes, Medium ~15-30 nodes, Broad ~25-45 nodes
+   - **Category tagging**: The first element of each node's `tags` array is its **category** — used as the section header in `_index.md` and subgraph label in the mermaid diagram. Categories must be **broad thematic groupings** that cluster multiple related nodes together. Aim for **5-10 categories** total so that each category contains 2+ nodes. Do **not** use individual gene names (e.g., "SOD1", "FUS"), specific molecules, or narrow entities as categories — those belong in `tags[1:]` or in the `entities` array.
+     - Good categories: `"methods"`, `"cell-type-alterations"`, `"genetic-subtypes"`, `"RNA-metabolism"`, `"molecular-pathways"`, `"immune-response"`, `"biomarkers"`, `"genomic-integration"`
+     - Bad categories: `"SOD1"`, `"RIPK1"`, `"glutamate"`, `"cerebellum"`, `"TGF-beta"` (too narrow — most will contain only 1 node)
 3. **Design the graph structure**:
    - Identify all nodes and write a brief title + summary for each
    - Determine relationships between nodes using this vocabulary:
@@ -270,7 +324,7 @@ After the user confirms, proceed to Phase 2.
      - `derived_from` — one finding leads to another
      - `mechanism_of` — describes how something in another node works
    - **Controversy tracking**: When you identify a `contradicts` relationship between two nodes, add a `> [!debate]` callout to both nodes' Detail sections summarizing the conflict: what each side claims, which evidence supports each position, and whether there is a current resolution or consensus.
-3b. **Entity extraction and normalization.** For each node, extract biomedical entities from the title, summary, and detail text. Normalize them using established identifiers:
+4. **Entity extraction and normalization.** For each node, extract biomedical entities from the title, summary, and detail text. Normalize them using established identifiers:
 
    | Entity type | Normalization rule | Example |
    |-------------|-------------------|---------|
@@ -284,9 +338,9 @@ After the user confirms, proceed to Phase 2.
 
    Store in the node frontmatter `entities` array. This is best-effort — apply your biomedical knowledge to normalize, but prefix uncertain normalizations with `?` on the `normalized_id` (e.g., `"?HGNC:12345"`). Entities enable cross-KG linking (via `/link-kg`) and structured queries.
 
-4. **Assign references**: For each node, identify which PMIDs, NCT IDs, and/or ChEMBL IDs from the gathered material support it. **Every node MUST have at least one verifiable reference** (PMID, NCT ID, or ChEMBL ID). Prefer PubMed-backed nodes when possible — nodes backed exclusively by ClinicalTrials.gov or ChEMBL data are valid but should be the exception. For each reference on a node, write a specific `supports` statement describing what it contributes to this node's claim.
+5. **Assign references**: For each node, identify which PMIDs, NCT IDs, and/or ChEMBL IDs from the gathered material support it. **Every node MUST have at least one verifiable reference** (PMID, NCT ID, or ChEMBL ID). Prefer PubMed-backed nodes when possible — nodes backed exclusively by ClinicalTrials.gov or ChEMBL data are valid but should be the exception. For each reference on a node, write a specific `supports` statement describing what it contributes to this node's claim.
 
-4b. **Update ledger assignments.** After all nodes have been assigned their references, update the PMID ledger:
+6. **Update ledger assignments.** After all nodes have been assigned their references, update the PMID ledger:
    1. For each PMID assigned to a node, prepare a batch entry with `disposition: "used"` and the `node` field set to the assigned node ID.
    2. For PMIDs that were metadata-fetched (in the Phase 1b Step 4b cache) but NOT assigned to any node, prepare entries with `disposition: "irrelevant"` and `notes: "metadata-fetched but not assigned to any node"`.
    3. Run:
@@ -294,13 +348,13 @@ After the user confirms, proceed to Phase 2.
       python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_assignments.json
       ```
 
-5. **Write node files**: For each node, create a `.md` file in the `nodes/` subdirectory. Leave `evidence_tier` fields as `"unclassified"` — they will be set by the classification script in Step 5b. Follow this format:
+7. **Write node files**: For each node, create a `.md` file in the `nodes/` subdirectory. Leave `evidence_tier` fields as `"unclassified"` — they will be set by the classification script in Step 8. Follow this format:
 
 ```yaml
 ---
 id: "node_001"
 title: "Short descriptive title"
-tags: ["category", "subcategory"]
+tags: ["molecular-pathways", "apoptosis", "p53"]
 evidence_tier: "rct"
 pubmed_ids:
   - pmid: "XXXXXXXX"
@@ -341,7 +395,7 @@ Longer explanation with nuance.
 ## Evidence
 
 ### Literature
-- **PMID XXXXXXXX** (Author et al., Year, *Journal*) `[rct]`: Specific finding.
+- **PMID XXXXXXXX** (Author et al., Year, *Journal*): Specific finding.
 
 ### Clinical Trials
 - **NCT04000000** (Phase III, Recruiting): Primary endpoint description.
@@ -356,15 +410,15 @@ Longer explanation with nuance.
 
 Omit the "Clinical Trials" and "Compound Data" subsections if the node has no references of that type.
 
-5b. **Classify evidence tiers.** Run the deterministic classification script to assign evidence tiers to all nodes based on PMID title metadata from the ledger:
+8. **Classify evidence tiers.** Run the deterministic classification script to assign evidence tiers to all nodes based on PMID title metadata from the ledger:
     ```
     python3 scripts/classify_evidence_tier.py {KG_FOLDER} --update-ledger
     ```
     This scans article titles for study-type keywords (meta-analysis, RCT, cohort, etc.) and sets both per-PMID and node-level `evidence_tier` fields. It also updates `manifest.json` statistics.
 
-6. **Write manifest.json**: Create the Tier 1 index with all nodes, edges, summaries, keywords, and statistics. Follow the schema at `schemas/graph_schema.json`. The `summary` field should be exactly one sentence. The `keywords` field should contain 3-8 search terms that would help match this node to future queries.
+9. **Write manifest.json**: Create the Tier 1 index with all nodes, edges, summaries, keywords, and statistics. Follow the schema at `schemas/graph_schema.json`. The `summary` field should be exactly one sentence. The `keywords` field should contain 3-8 search terms that would help match this node to future queries.
 
-7. **Write _index.md**: Create the Obsidian-compatible overview with `[[wikilinks]]` to all nodes, organized by category, with a mermaid graph diagram showing the relationships. Apply these mermaid scaling rules:
+10. **Write _index.md**: Create the Obsidian-compatible overview with `[[wikilinks]]` to all nodes, organized by category, with a mermaid graph diagram showing the relationships. Apply these mermaid scaling rules:
    - **< 30 nodes**: Use a single flat `graph TD` diagram.
    - **30-50 nodes**: Use `subgraph` blocks grouped by primary tag/category. Show intra-category edges within each subgraph and inter-category edges between subgraphs.
    - **50+ nodes**: Render a category-level overview diagram (each category as a single box with node count) plus per-category detail diagrams inside collapsible `<details>` sections.
@@ -400,16 +454,16 @@ Omit the "Clinical Trials" and "Compound Data" subsections if the node has no re
    - Never delete existing nodes during an update — only add or augment
    - Mark each touched node with today's date in `updated`
 5. **Update manifest.json**: Merge new entries, increment `version`, update `statistics`
-5b. **Classify evidence tiers.** Run the deterministic classification script to assign evidence tiers to all nodes based on PMID title metadata from the ledger:
+6. **Classify evidence tiers.** Run the deterministic classification script to assign evidence tiers to all nodes based on PMID title metadata from the ledger:
     ```
     python3 scripts/classify_evidence_tier.py {KG_FOLDER} --update-ledger
     ```
     This scans article titles for study-type keywords (meta-analysis, RCT, cohort, etc.) and sets both per-PMID and node-level `evidence_tier` fields. It also updates `manifest.json` statistics.
-6. **Update _index.md**: Add new nodes to the appropriate categories
+7. **Update _index.md**: Add new nodes to the appropriate categories
 
 Track which nodes are "newly added or modified" — these go to Phase 3.
 
-7. **Maintain changelog buffer** (UPDATE mode only): Throughout this phase, track all changes in a working buffer:
+8. **Maintain changelog buffer** (UPDATE mode only): Throughout this phase, track all changes in a working buffer:
    - Nodes created (ID, title)
    - Nodes modified (ID, what changed: new PMIDs, revised text, new external IDs)
    - References added (PMID/NCT/ChEMBL ID → which nodes)
@@ -426,7 +480,13 @@ The evaluation logic lives in a dedicated skill at `.claude/commands/evaluate-kg
 
 ### Launching the evaluator
 
-Invoke the `/evaluate-kg` skill with the appropriate arguments:
+**If `--test` is set**, append `--test` to the evaluator invocation so it reads mock fixtures instead of calling PubMed MCP tools:
+
+```
+/evaluate-kg --kg tests/output/KG_Melatonin_Circadian --nodes {COMMA_SEPARATED_NODE_IDS} --sources pubmed --test
+```
+
+**Otherwise**, invoke normally:
 
 ```
 /evaluate-kg --kg {KG_FOLDER} --nodes {COMMA_SEPARATED_NODE_IDS} --sources {COMMA_SEPARATED_ACTIVE_SOURCES}
@@ -506,9 +566,14 @@ In BUILD mode, do not generate a changelog.
    ```
    If validation fails, investigate and fix. Warnings about ledger-manifest drift should be addressed by running `python3 scripts/pmid_ledger.py sync {KG_FOLDER}`.
 
-2. Log the operation:
+2. Log the operation. **This step is mandatory — do not skip it even if prior validation steps had warnings.**
+   First, get the ledger statistics:
    ```
-   python3 scripts/append_log.py {KG_FOLDER} --op {build|update} --summary "Mode: {mode}, v{version}. Nodes: {created} created, {updated} updated. PMIDs: {unique_count}. Eval: {passed} passed, {failed} failed."
+   python3 scripts/pmid_ledger.py stats {KG_FOLDER}
+   ```
+   Then log. Read `_evaluation_log.json` to count passed/failed if not already known. If the evaluate-kg orchestrator did not write an `evaluate` entry to `_log.md`, include evaluation details in this entry:
+   ```
+   python3 scripts/append_log.py {KG_FOLDER} --op {build|update} --summary "Mode: {mode}, v{version}. Nodes: {created} created, {updated} updated. PMIDs: {unique_count} assigned (ledger: {total} tracked, {irrelevant} irrelevant, {failed} failed). Eval: {passed} passed, {failed_eval} failed."
    ```
 
 3. Print a terminal summary:
