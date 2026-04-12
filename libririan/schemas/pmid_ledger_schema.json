@@ -74,6 +74,18 @@
             "type": ["integer", "null"],
             "description": "Publication year (null if metadata was not retrieved)"
           },
+          "authors": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object",
+              "required": ["last_name"],
+              "properties": {
+                "first_name": { "type": "string" },
+                "last_name": { "type": "string" }
+              }
+            },
+            "description": "Article author list (null if metadata was not retrieved)"
+          },
           "notes": {
             "type": "string",
             "description": "Free-text notes (e.g., reason for irrelevance, failure details)"

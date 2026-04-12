@@ -117,7 +117,7 @@ A topic can activate both additional sources. Store the result as `active_source
 
 **Step 4 (test)** — Read `tests/fixtures/mock_pubmed.json` using the Read tool. Parse the JSON. For each PMID in the deduplicated set, extract its full metadata (title, abstract, authors, journal, year, publication_types, pmc_id). Cache all metadata in memory exactly as you would in normal mode — this cache is used in Phase 2 and Phase 3.
 
-**Step 4b-4c (test)** — Persist metadata to the ledger using the real script — this is NOT mocked. Write a batch-add JSON file to `/tmp/pmid_test_batch.json` with all 5 PMIDs, each with `disposition: "used"`, `title`, `journal`, `year`, and `publication_types` from the fixture. Then run:
+**Step 4b-4c (test)** — Persist metadata to the ledger using the real script — this is NOT mocked. Write a batch-add JSON file to `/tmp/pmid_test_batch.json` with all 5 PMIDs, each with `disposition: "used"`, `title`, `authors`, `journal`, `year`, and `publication_types` from the fixture. Then run:
 ```
 python3 scripts/pmid_ledger.py batch-add tests/output/KG_Melatonin_Circadian --input /tmp/pmid_test_batch.json
 ```
@@ -163,7 +163,7 @@ python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_discarded
 
 **Step 4b — Cache metadata.** Retain all metadata retrieved in this step as a working mapping of `PMID → {title, abstract, authors, journal, year, publication_type}`. This cache persists through Phases 2-3 and is used by Phase 3 Step E1 to avoid redundant API calls.
 
-**Step 4c — Persist metadata to ledger.** For every PMID whose metadata was just retrieved, prepare a batch-add JSON file. Each entry **must** include: `"disposition": "used"`, `"title"`, `"journal"`, `"year"`, and `"publication_types"` (the list of PubMed publication type tags, e.g., `["Journal Article", "Randomized Controlled Trial"]`). The `publication_types` field is critical — it is the primary input for evidence tier classification. Run:
+**Step 4c — Persist metadata to ledger.** For every PMID whose metadata was just retrieved, prepare a batch-add JSON file. Each entry **must** include: `"disposition": "used"`, `"title"`, `"authors"` (list of `{"first_name": "...", "last_name": "..."}` objects), `"journal"`, `"year"`, and `"publication_types"` (the list of PubMed publication type tags, e.g., `["Journal Article", "Randomized Controlled Trial"]`). The `publication_types` field is critical — it is the primary input for evidence tier classification. The `authors` field is used by `stamp_literature.py` for deterministic citation formatting. Run:
 ```
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_metadata.json
 ```
@@ -206,7 +206,7 @@ Record these as the gap-fill focus areas. Quarantined nodes should be prioritize
 
 **Step 6: Merge and dedup.** Combine PMIDs from both tracks and remove any PMID already in `known_pmids`. The remaining novel PMIDs proceed to metadata and full-text retrieval (counts per tier table, unchanged). Batch `get_article_metadata` calls **in parallel, up to 5 at a time**.
 
-**Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `journal`, `year`, and `publication_types` (the list of PubMed publication type tags — critical for evidence tier classification). Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
+**Step 6b — Persist novel PMIDs to ledger.** After metadata retrieval for the novel PMIDs, persist them to the ledger in the same way as BUILD Step 4c: prepare a batch-add JSON file with `disposition: "used"`, `title`, `authors` (list of `{"first_name": "...", "last_name": "..."}` objects), `journal`, `year`, and `publication_types` (the list of PubMed publication type tags — critical for evidence tier classification). Also record any below-cutoff PMIDs as `disposition: "irrelevant"` (same as BUILD Step 3b). Run:
 ```
 python3 scripts/pmid_ledger.py batch-add {KG_FOLDER} --input /tmp/pmid_update_batch.json
 ```
@@ -395,7 +395,7 @@ Longer explanation with nuance.
 ## Evidence
 
 ### Literature
-- **PMID XXXXXXXX** (Author et al., Year, *Journal*): Specific finding.
+- **PMID XXXXXXXX** (Author et al., Year, *Journal*) [evidence_tier]: Article title *(Overwritten by stamp_literature.py in Step 8b)*
 
 ### Clinical Trials
 - **NCT04000000** (Phase III, Recruiting): Primary endpoint description.
@@ -416,25 +416,19 @@ Omit the "Clinical Trials" and "Compound Data" subsections if the node has no re
     ```
     This scans article titles for study-type keywords (meta-analysis, RCT, cohort, etc.) and sets both per-PMID and node-level `evidence_tier` fields. It also updates `manifest.json` statistics.
 
+8b. **Stamp literature sections.** Deterministically rewrite all `### Literature` sections using ledger metadata and frontmatter evidence tiers:
+    ```
+    python3 scripts/stamp_literature.py {KG_FOLDER}
+    ```
+    This replaces LLM-generated Literature bullets with exact citation data from the PMID ledger (title, authors, journal, year) and evidence tier badges from frontmatter. Format: `- **PMID {pmid}** ({authors}, {year}, *{journal}*) [{evidence_tier}]: {title}` Author rules: 3+ authors → "First et al.", 2 → "First & Second", 1 → "Name".
+
 9. **Write manifest.json**: Create the Tier 1 index with all nodes, edges, summaries, keywords, and statistics. Follow the schema at `schemas/graph_schema.json`. The `summary` field should be exactly one sentence. The `keywords` field should contain 3-8 search terms that would help match this node to future queries.
 
-10. **Write _index.md**: Create the Obsidian-compatible overview with `[[wikilinks]]` to all nodes, organized by category, with a mermaid graph diagram showing the relationships. Apply these mermaid scaling rules:
-   - **< 30 nodes**: Use a single flat `graph TD` diagram.
-   - **30-50 nodes**: Use `subgraph` blocks grouped by primary tag/category. Show intra-category edges within each subgraph and inter-category edges between subgraphs.
-   - **50+ nodes**: Render a category-level overview diagram (each category as a single box with node count) plus per-category detail diagrams inside collapsible `<details>` sections.
-   See `templates/index_template.md` for examples of each format.
-
-   **Quarantine filtering**: Exclude quarantined nodes (`quarantined: true`) from the category listings and the mermaid diagram. Also exclude edges where either endpoint is quarantined. If any quarantined nodes exist, add a collapsed section at the bottom of `_index.md`:
-   ```markdown
-   <details><summary>Quarantined Nodes ({count})</summary>
-
-   These nodes failed independent verification and are excluded from search and linking.
-   They may be reinstated after UPDATE mode finds better references.
-
-   - ~~[[node_005_slug]]~~ — evaluation failed ({date})
-   - ~~[[node_012_slug]]~~ — evaluation failed ({date})
-   </details>
-   ```
+10. **Generate _index.md**: Compose a 2-3 sentence Overview paragraph summarizing what this KG covers, then run the deterministic index generator:
+    ```
+    python3 scripts/generate_index.py {KG_FOLDER} --overview-text "Your overview paragraph here."
+    ```
+    This generates the full `_index.md` from `manifest.json`: frontmatter, nodes grouped by category with evidence tier badges, statistics, mermaid diagram (auto-scaled: <30 flat, 30-50 subgraph, 50+ category-level), and quarantine section. See `templates/index_template.md` for the target format.
 
 ### If UPDATE mode:
 
@@ -459,7 +453,14 @@ Omit the "Clinical Trials" and "Compound Data" subsections if the node has no re
     python3 scripts/classify_evidence_tier.py {KG_FOLDER} --update-ledger
     ```
     This scans article titles for study-type keywords (meta-analysis, RCT, cohort, etc.) and sets both per-PMID and node-level `evidence_tier` fields. It also updates `manifest.json` statistics.
-7. **Update _index.md**: Add new nodes to the appropriate categories
+6b. **Stamp literature sections.** Deterministically rewrite all `### Literature` sections:
+    ```
+    python3 scripts/stamp_literature.py {KG_FOLDER}
+    ```
+7. **Regenerate _index.md** (preserves existing Overview paragraph):
+    ```
+    python3 scripts/generate_index.py {KG_FOLDER}
+    ```
 
 Track which nodes are "newly added or modified" — these go to Phase 3.
 
@@ -503,19 +504,16 @@ Where:
 
 1. Read the `_evaluation_log.json` written by the evaluator.
 2. Read any node files that were modified (remediated or marked as failed).
-3. **Quarantine newly failed nodes.** The evaluator already sets `quarantined: true` on nodes that fail (see evaluate-kg-worker Step E4). Verify this by checking node frontmatter. For any node with `evaluation_status: "failed"` that is missing the quarantine flag, set it:
+3. **Enforce quarantine invariant.** Run the deterministic quarantine enforcement script:
    ```
-   python3 scripts/update_frontmatter.py {node_path} '{"quarantined": true}'
+   python3 scripts/enforce_quarantine.py {KG_FOLDER}
    ```
-4. **Un-quarantine newly passed nodes.** For any previously quarantined node that now has `evaluation_status: "passed"` (e.g., after UPDATE mode gap-fill), verify the evaluator set `quarantined: false`. If not, set it:
-   ```
-   python3 scripts/update_frontmatter.py {node_path} '{"quarantined": false}'
-   ```
-5. Ensure manifest statistics are up-to-date by running:
+   This scans all node files in a single pass: sets `quarantined: true` for nodes with `evaluation_status: "failed"`, sets `quarantined: false` for nodes with `evaluation_status: "passed"`, and leaves all other nodes unchanged.
+4. Ensure manifest statistics are up-to-date by running:
    ```
    python3 scripts/update_manifest_stats.py {KG_FOLDER}
    ```
-6. Report the evaluation results (including quarantine actions) to the user before proceeding to Phase 4.
+5. Report the evaluation results (including quarantine actions) to the user before proceeding to Phase 4.
 
 ---
 

@@ -116,7 +116,8 @@ def _apply_entry(ledger: dict, pmid: str, disposition: str, *,
                  title: str | None = None, journal: str | None = None,
                  year: int | None = None, node: str | None = None,
                  tier: str | None = None, notes: str | None = None,
-                 publication_types: list[str] | None = None) -> dict | None:
+                 publication_types: list[str] | None = None,
+                 authors: list[dict] | None = None) -> dict | None:
     """Add or merge a single PMID entry. Returns the entry, or None on invalid transition."""
     entries = ledger.setdefault("entries", {})
     now = _now_iso()
@@ -143,6 +144,8 @@ def _apply_entry(ledger: dict, pmid: str, disposition: str, *,
             existing["notes"] = notes
         if publication_types is not None:
             existing["publication_types"] = publication_types
+        if authors is not None:
+            existing["authors"] = authors
         if node and node not in existing.get("assigned_nodes", []):
             existing.setdefault("assigned_nodes", []).append(node)
         return existing
@@ -155,6 +158,7 @@ def _apply_entry(ledger: dict, pmid: str, disposition: str, *,
             "assigned_nodes": [node] if node else [],
             "evidence_tier": tier,
             "publication_types": publication_types,
+            "authors": authors,
             "journal": journal,
             "year": year,
             "notes": notes or "",
@@ -224,6 +228,8 @@ def cmd_init(args):
                 "last_checked": now,
                 "assigned_nodes": node_ids,
                 "evidence_tier": None,
+                "publication_types": None,
+                "authors": None,
                 "journal": None,
                 "year": None,
                 "notes": "bootstrapped from manifest.json",
@@ -308,6 +314,7 @@ def cmd_batch_add(args):
             tier=item.get("tier"),
             notes=item.get("notes"),
             publication_types=item.get("publication_types"),
+            authors=item.get("authors"),
         )
         if result is not None:
             if was_new:

@@ -15,6 +15,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -131,11 +132,12 @@ class KGLinter:
         for nid in self.node_ids:
             if inbound[nid] == 0:
                 outbound = sum(1 for e in self.edges if e.get("source") == nid)
-                self._add("orphan_nodes", "warning",
-                          f"Node {nid} has zero inbound edges",
-                          node_id=nid,
-                          details={"outbound_count": outbound,
-                                   "title": self.manifest_nodes[nid].get("title", "")})
+                if outbound == 0:
+                    self._add("orphan_nodes", "warning",
+                              f"Node {nid} is disconnected (zero inbound and outbound edges)",
+                              node_id=nid,
+                              details={"outbound_count": outbound,
+                                       "title": self.manifest_nodes[nid].get("title", "")})
 
     # ------------------------------------------------------------------
     # Check 2: Under-referenced nodes
@@ -628,7 +630,7 @@ class KGLinter:
                     if not os.path.exists(abs_file):
                         continue
                     try:
-                        fm, _ = parse(abs_file)
+                        fm, body = parse(abs_file)
                     except Exception:
                         continue
                     node_id = fm.get("id")
@@ -643,13 +645,26 @@ class KGLinter:
                         pmid = entry.get("pmid") if isinstance(entry, dict) else str(entry)
                         if pmid:
                             pmids.append(str(pmid))
+                    # Derive keywords from title + summary paragraph.
+                    _title = fm.get("title", "")
+                    _summary_match = re.search(
+                        r'## Summary\s*\n(.*?)(?=\n## |\Z)', body, re.DOTALL)
+                    _summary_text = _summary_match.group(1).strip() if _summary_match else ""
+                    _kw_source = f"{_title} {_summary_text}"
+                    _kw_tokens = re.findall(r"[a-z0-9]+", _kw_source.lower())
+                    _stop = {"a", "an", "and", "are", "as", "at", "be", "by",
+                             "for", "from", "has", "in", "is", "it", "its",
+                             "of", "on", "or", "the", "to", "was", "with"}
+                    _keywords = list(dict.fromkeys(
+                        t for t in _kw_tokens
+                        if len(t) > 2 and t not in _stop))[:12]
                     manifest.setdefault("nodes", []).append({
                         "id": node_id,
-                        "title": fm.get("title", ""),
+                        "title": _title,
                         "file": rel_file,
                         "tags": fm.get("tags", []),
                         "summary": fm.get("summary", ""),
-                        "keywords": fm.get("tags", []),
+                        "keywords": _keywords,
                         "pubmed_ids": pmids,
                         "evaluation_status": fm.get("evaluation_status", "pending"),
                         "evidence_tier": fm.get("evidence_tier", "unclassified"),

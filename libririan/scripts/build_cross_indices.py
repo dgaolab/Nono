@@ -72,7 +72,7 @@ def main():
                     ref_index[ext_id].append({"kg": kg_name, "node_id": node_id})
 
             # Keywords from manifest
-            keywords = set(node_entry.get("keywords", []))
+            keywords = {k.lower() for k in node_entry.get("keywords", [])}
             if keywords:
                 node_keywords[(kg_name, node_id)] = keywords
 

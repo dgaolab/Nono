@@ -112,7 +112,7 @@ TITLE_RULES: list[tuple[str, int, list[re.Pattern]]] = [
         re.compile(r"cohort", re.IGNORECASE),
         re.compile(r"longitudinal", re.IGNORECASE),
         re.compile(r"prospective", re.IGNORECASE),
-        re.compile(r"retrospective", re.IGNORECASE),
+        re.compile(r"retrospective\s+(study|studies|analysis|cohort|review)", re.IGNORECASE),
     ]),
     ("case_series", 4, [
         re.compile(r"case series", re.IGNORECASE),
