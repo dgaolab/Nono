@@ -294,6 +294,18 @@ def check_all_nodes_have_references(manifest: dict) -> CheckResult:
     )
 
 
+def check_search_profile(manifest: dict) -> CheckResult:
+    """BUILD must persist search_profile (consumed by preflight.py and UPDATE searches)."""
+    profile = manifest.get("search_profile")
+    if not isinstance(profile, dict):
+        return CheckResult("search_profile", False, "search_profile missing from manifest")
+    missing = [k for k in ("breadth", "sub_queries") if not profile.get(k)]
+    if missing:
+        return CheckResult("search_profile", False,
+                           f"search_profile missing fields: {missing}")
+    return CheckResult("search_profile", True)
+
+
 def check_ledger_integrity(ledger: dict, expected: dict) -> list[CheckResult]:
     """Verify all mock PMIDs are tracked in the ledger."""
     results = []
@@ -370,6 +382,7 @@ def main():
         all_results.extend(check_evaluation_completeness(manifest, expected))
         all_results.extend(check_edges(manifest))
         all_results.append(check_all_nodes_have_references(manifest))
+        all_results.append(check_search_profile(manifest))
 
     if ledger is not None:
         all_results.extend(check_ledger_integrity(ledger, expected))

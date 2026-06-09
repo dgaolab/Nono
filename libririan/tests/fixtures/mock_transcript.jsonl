@@ -1,0 +1,6 @@
+{"type":"user","sessionId":"sess-1","message":{"role":"user","content":"hi"}}
+{"type":"assistant","sessionId":"sess-1","message":{"id":"msg_01","model":"claude-opus-4-8","usage":{"input_tokens":1000,"output_tokens":50,"cache_read_input_tokens":2000,"cache_creation_input_tokens":500}}}
+{"type":"assistant","sessionId":"sess-1","message":{"id":"msg_01","model":"claude-opus-4-8","usage":{"input_tokens":1000,"output_tokens":200,"cache_read_input_tokens":2000,"cache_creation_input_tokens":500}}}
+{"type":"assistant","sessionId":"sess-1","message":{"id":"msg_02","model":"claude-haiku-4-5-20251001","usage":{"input_tokens":500,"output_tokens":100,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
+this line is not json
+{"type":"system","sessionId":"sess-1","content":"reminder"}

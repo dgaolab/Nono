@@ -182,7 +182,7 @@ python3 scripts/pmid_ledger.py query {KG_FOLDER} --pmids-only
 ```
 Store the result as `known_pmids`. This excludes not only PMIDs assigned to nodes, but also PMIDs previously retrieved and deemed irrelevant — preventing redundant MCP calls on already-evaluated literature. These will be excluded from both tracks' results.
 
-**Step 2: Identify weak spots.** Scan the existing KG for gap-fill targets:
+**Step 2: Identify weak spots.** Scan the node entries in `manifest.json` — do NOT read node `.md` files; the manifest carries `pubmed_ids`, `evaluation_status`, `quarantined`, and `tags` — for gap-fill targets:
 - Nodes with only 1 PMID (under-referenced)
 - Nodes with `evaluation_status: "failed"` or `quarantined: true` (unverified claims — these are the primary un-quarantine candidates)
 - Tags or categories that have fewer nodes than expected for the topic breadth
@@ -196,7 +196,7 @@ Record these as the gap-fill focus areas. Quarantined nodes should be prioritize
 | **Medium** | 3-5 | 3 | 2 |
 | **Broad** | 5-7 | 4 | 3 |
 
-**Step 4: Recent track.** Use the same facet decomposition as the original BUILD. Fire all sub-query `search_articles` calls **in parallel** (batch up to 5 concurrent calls). For each sub-query, call `search_articles` with `date_from` = `since_date`, `datetype: "edat"`, and `max_results` per tier.
+**Step 4: Recent track.** Use the sub-queries persisted in `manifest.json` → `search_profile.sub_queries`. (Legacy KG without `search_profile`: re-derive the facet decomposition as in BUILD Step 1, then persist it in Phase 2 UPDATE Step 5.) Fire all sub-query `search_articles` calls **in parallel** (batch up to 5 concurrent calls). For each sub-query, call `search_articles` with `date_from` = `since_date`, `datetype: "edat"`, and `max_results` per tier.
 
 **Step 5: Gap-fill track.** Craft queries that target the weak spots identified in Step 2. These queries MUST differ from the original BUILD queries — use:
 - Alternative terms, synonyms, or MeSH headings for the same concepts
@@ -422,7 +422,7 @@ Omit the "Clinical Trials" and "Compound Data" subsections if the node has no re
     ```
     This replaces LLM-generated Literature bullets with exact citation data from the PMID ledger (title, authors, journal, year) and evidence tier badges from frontmatter. Format: `- **PMID {pmid}** ({authors}, {year}, *{journal}*) [{evidence_tier}]: {title}` Author rules: 3+ authors → "First et al.", 2 → "First & Second", 1 → "Name".
 
-9. **Write manifest.json**: Create the Tier 1 index with all nodes, edges, summaries, keywords, and statistics. Follow the schema at `schemas/graph_schema.json`. The `summary` field should be exactly one sentence. The `keywords` field should contain 3-8 search terms that would help match this node to future queries.
+9. **Write manifest.json**: Create the Tier 1 index with all nodes, edges, summaries, keywords, and statistics. Follow the schema at `schemas/graph_schema.json`. The `summary` field should be exactly one sentence. The `keywords` field should contain 3-8 search terms that would help match this node to future queries. Also write the `search_profile` field: `{"breadth": "<tier from Phase 1b Step 0>", "sub_queries": [<the exact sub-query strings used in Phase 1b Step 1>], "updated": "<today>"}` — it is consumed by `scripts/preflight.py` (scheduled-run early exit) and reused by UPDATE-mode Recent-track searches. In test mode, record the two fixed test sub-queries.
 
 10. **Generate _index.md**: Compose a 2-3 sentence Overview paragraph summarizing what this KG covers, then run the deterministic index generator:
     ```
@@ -432,22 +432,22 @@ Omit the "Clinical Trials" and "Compound Data" subsections if the node has no re
 
 ### If UPDATE mode:
 
-1. **Load existing graph**: Read `manifest.json` and all node `.md` files listed in it.
+1. **Load the manifest only**: Read `manifest.json`. Do NOT read node `.md` files at this stage — the per-node `summary`, `keywords`, `tags`, `pubmed_ids`, `evaluation_status`, and `evidence_tier` in the manifest are sufficient for all routing decisions. Node files are opened later, one at a time, only for nodes actually selected for modification (Step 4). This keeps UPDATE context cost proportional to the week's changes instead of total KG size.
 2. **Derive `since_date`** (if `--since` was not explicitly provided):
    - If `manifest.json` has `schedule.last_run` (non-null), use that timestamp's date portion.
    - Otherwise, fall back to the `updated` field in `manifest.json`.
    - Convert to `YYYY/MM/DD` format and store as `since_date`. This will be used in Phase 1b to constrain PubMed searches.
    - If `--since` was explicitly provided, use that value instead (convert `YYYY-MM-DD` → `YYYY/MM/DD`).
-3. **Compare new material against existing nodes**:
-   - Identify existing nodes that need updated/additional references
+3. **Compare new material against existing nodes** (using manifest summaries and keywords only):
+   - Identify existing nodes that need updated/additional references — match each new article against the manifest node summaries and keywords. For fragments that are hard to place, run `python3 scripts/search_nodes.py "<fragment key terms>" {KG_FOLDER}/manifest.json --top 5 --compact` to rank candidate nodes deterministically.
    - Identify entirely new knowledge that warrants new nodes
-   - Identify relationships that should be added or revised
+   - Identify relationships that should be added or revised — design relationships for new nodes from the manifest summaries; do not read other node files for this
 4. **Apply changes**:
-   - For existing nodes gaining new references: append new PMIDs and update the Detail/Evidence sections
+   - For existing nodes gaining new references: read the node's full file first (`python3 scripts/parse_node.py {node_path}` or the Read tool) — only now, immediately before editing — then append new PMIDs and update the Detail/Evidence sections
    - For new nodes: create new `.md` files with the next available `node_XXX` ID
    - Never delete existing nodes during an update — only add or augment
    - Mark each touched node with today's date in `updated`
-5. **Update manifest.json**: Merge new entries, increment `version`, update `statistics`
+5. **Update manifest.json**: Merge new entries, increment `version`, update `statistics`. Refresh `search_profile.updated`; if `search_profile` was absent (legacy KG), write it now from the sub-queries used in this run's Recent track.
 6. **Classify evidence tiers.** Run the deterministic classification script to assign evidence tiers to all nodes based on PMID title metadata from the ledger:
     ```
     python3 scripts/classify_evidence_tier.py {KG_FOLDER} --update-ledger
@@ -563,6 +563,11 @@ In BUILD mode, do not generate a changelog.
    python3 scripts/pmid_ledger.py validate {KG_FOLDER}
    ```
    If validation fails, investigate and fix. Warnings about ledger-manifest drift should be addressed by running `python3 scripts/pmid_ledger.py sync {KG_FOLDER}`.
+
+1d. Stamp the schedule timestamp (writes `schedule.last_run`; silently a no-op if this KG has no `schedule` block):
+   ```
+   python3 scripts/update_manifest_stats.py {KG_FOLDER} --stamp-last-run
+   ```
 
 2. Log the operation. **This step is mandatory — do not skip it even if prior validation steps had warnings.**
    First, get the ledger statistics:

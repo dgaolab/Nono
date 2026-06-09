@@ -5,3 +5,4 @@ tests/output/
 scripts/lib/__pycache__/
 __pycache__/
 *.pyc
+_cost_log.jsonl

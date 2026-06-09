@@ -34,10 +34,9 @@ Example invocations:
 
 ## Step 1: Dispatch Strategy
 
-**If N <= 5** — Direct evaluation (no parallelization overhead):
-- Invoke `/evaluate-kg-worker` with the same `--kg`, `--nodes`, and `--sources` arguments. Do NOT pass `--chunk-id`. **If `--test` was passed, include `--test` in the worker invocation.**
-- The worker handles everything: evaluation, writing `_evaluation_log.json`, updating node files, and updating manifest statistics.
-- Skip to Step 6 (Report) after the worker completes.
+**If N <= 5** — Single worker (still spawned via the Agent tool so it runs on the cheaper model):
+- Use the Agent tool to spawn ONE worker with the Agent tool's `model` parameter set to `haiku`, using the Step 3a prompt template with `--chunk-id 1` and `--no-remediate`. **If `--test` was passed, include `--test`.**
+- After it completes, verify `_eval_chunk_1.json` exists (retry once as in Step 3b), then continue at Step 3.5 (escalation) and Steps 4-6 exactly as in parallel mode — the orchestrator owns merging, ledger sync, and manifest statistics in both paths.
 
 **If N > 5** — Parallel evaluation:
 - Continue to Step 2.
@@ -64,14 +63,14 @@ Process one wave at a time. For each wave:
 
 ### 3a. Launch workers in parallel
 
-For every chunk in the current wave, use the **Agent tool** to spawn a worker agent. Issue **all Agent calls for the wave in a single response** to enable parallel execution.
+For every chunk in the current wave, use the **Agent tool** to spawn a worker agent **with the Agent tool's `model` parameter set to `haiku`** — per-PMID verification is high-volume, well-bounded judgment work suited to the cheaper model, and every fail verdict gets a stronger-model second opinion in Step 3.5. Issue **all Agent calls for the wave in a single response** to enable parallel execution.
 
 Each Agent call should use this prompt template (fill in the actual values). **If `--test` was passed, include `--test` in the worker invocation:**
 
 ```
 You are a Knowledge Graph evaluation worker. Invoke the /evaluate-kg-worker skill with these exact arguments:
 
-/evaluate-kg-worker --kg {KG_FOLDER} --nodes {CHUNK_NODE_IDS} --sources {SOURCES} --chunk-id {N} {--test if test mode}
+/evaluate-kg-worker --kg {KG_FOLDER} --nodes {CHUNK_NODE_IDS} --sources {SOURCES} --chunk-id {N} --no-remediate {--test if test mode}
 
 Wait for the skill to complete. After it finishes, confirm which _eval_chunk_{N}.json file was written and summarize the evaluation results (how many nodes passed, failed, or needed remediation).
 ```
@@ -89,6 +88,23 @@ After all agents in the wave complete:
 ### 3c. Proceed to next wave
 
 Repeat Steps 3a-3b for the next wave until all waves are processed.
+
+---
+
+## Step 3.5: Escalation Pass (strong-model second opinion on fails)
+
+Haiku workers run with `--no-remediate`, so a failed node has NOT been remediated or quarantined yet — it is only recorded as failed in its chunk file. A wrongful quarantine is the worst failure mode, so fails get a second opinion:
+
+1. Read all `_eval_chunk_*.json` files and collect the node IDs with `overall_status: "failed"`.
+2. If there are none, continue to Step 4.
+3. Otherwise, spawn ONE worker via the Agent tool **without a `model` override** (it inherits the session model), using the Step 3a prompt template with:
+   - `--nodes` = the failed node IDs (comma-separated)
+   - `--chunk-id` = (highest chunk ID used so far) + 1
+   - NO `--no-remediate` flag — this worker performs full Step E4 remediation and quarantine
+   - `--test` if test mode
+4. After it completes, verify its chunk file exists (retry once, as in Step 3b). `merge_eval_chunks.py` merges chunks in numeric chunk-id order and later chunks win per node_id, so the escalation verdicts overwrite the Haiku fail verdicts at merge time.
+
+Net effect: passes are accepted from the cheap model; every fail — and all remediation and quarantine decisions — is confirmed by the stronger model.
 
 ---
 
@@ -164,8 +180,8 @@ If any nodes have `overall_status: "error"`, list them explicitly and recommend 
 ## Important Rules
 
 1. **Partitions must be disjoint.** Never assign the same node ID to more than one chunk. Validate this before dispatching.
-2. **Only this orchestrator writes `_evaluation_log.json` and updates manifest statistics** (in parallel mode). Workers write to `_eval_chunk_{N}.json` files only.
-3. **Workers update node `.md` files directly.** This is safe because each worker operates on a disjoint set of nodes.
+2. **Only this orchestrator writes `_evaluation_log.json` and updates manifest statistics** (in both the direct and parallel paths — every worker, including the N≤5 single worker, runs with `--chunk-id`). Workers write to `_eval_chunk_{N}.json` files only.
+3. **Workers update node `.md` files directly** for nodes they finalize. Haiku workers run with `--no-remediate`, so they update only passed nodes; failed nodes are left untouched for the Step 3.5 escalation worker (which runs full remediation and quarantine). This is safe because each worker operates on a disjoint set of nodes.
 4. **Clean up stale chunk files at startup** (Step 0) to handle prior interrupted runs.
 5. **Cap at 3 concurrent agents per wave** to avoid overwhelming MCP API rate limits.
 6. **Retry failed chunks exactly once.** Do not enter retry loops.

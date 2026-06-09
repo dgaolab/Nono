@@ -34,6 +34,29 @@
       "items": { "type": "string", "enum": ["pubmed", "clinicaltrials", "chembl", "user_provided"] },
       "description": "Data sources used in building this KG"
     },
+    "search_profile": {
+      "type": "object",
+      "description": "Persisted PubMed sub-queries — consumed by scripts/preflight.py and reused by UPDATE-mode Recent-track searches",
+      "required": ["breadth", "sub_queries"],
+      "properties": {
+        "breadth": {
+          "type": "string",
+          "enum": ["narrow", "medium", "broad"],
+          "description": "Topic breadth tier assigned in build-kg Phase 1b Step 0"
+        },
+        "sub_queries": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Exact PubMed sub-query strings used by the BUILD search"
+        },
+        "updated": {
+          "type": "string",
+          "format": "date",
+          "description": "Date the profile was last written"
+        }
+      }
+    },
     "schedule": {
       "type": "object",
       "description": "Optional: present when a cron job is active for this KG",
@@ -50,6 +73,11 @@
         "trigger_name": {
           "type": "string",
           "description": "Name of the Claude Code remote trigger"
+        },
+        "threshold": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum novel PMIDs from preflight required to run a scheduled update (default 3)"
         }
       },
       "required": ["cron", "trigger_name"]

@@ -13,6 +13,7 @@ Parse `$ARGUMENTS` for one of these modes:
 - **topic** (required): The research topic
 - **--cron** (optional): Cron expression. Defaults to `0 8 * * 1` (every Monday 8am)
 - **--output** (optional): Target KG folder name
+- **--threshold <N>** (optional): Minimum novel PMIDs (per the preflight check) required to run a scheduled update. Defaults to 3. Recorded as `schedule.threshold` in the manifest and substituted into the scheduled prompt.
 
 ### List active schedules:
 ```
@@ -42,12 +43,14 @@ Use the `/schedule` skill to create a remote trigger with:
 - **Prompt**: The following prompt for the scheduled agent:
 
 ```
-Run /build-kg "<topic>" --output <KG_FolderName>
+This is a scheduled KG update run for <KG_FolderName>.
 
-This is a scheduled update run. The KG already exists — run in UPDATE mode.
-UPDATE mode automatically filters PubMed searches to articles added since the last run (via schedule.last_run in manifest.json).
-Focus on finding new research that adds to or revises existing knowledge nodes.
-After the build completes, update the schedule.last_run timestamp in manifest.json.
+1. First run the deterministic preflight check (no MCP tools, no KG loading):
+   python3 scripts/preflight.py <KG_FolderName> --threshold <threshold> --log
+2. If the JSON output has "proceed": false, report exactly one line — "Quiet week: {novel_count} novel PMIDs since {since_date}, below threshold {threshold} — skipped update." — and STOP. Do not load the KG and do not call any MCP tools.
+3. If preflight exits non-zero (network error, or a legacy manifest without search_profile), fall through to step 4 anyway — a wasted full run is better than a silently skipped update.
+4. Otherwise run: /build-kg "<topic>" --output <KG_FolderName>
+   The KG already exists, so this runs in UPDATE mode: it derives its date window from schedule.last_run and stamps schedule.last_run when it finishes (Phase 4 step 1d). Focus on new research that adds to or revises existing knowledge nodes.
 ```
 
 ### Step 3: Update Manifest
@@ -57,7 +60,8 @@ Add or update the `schedule` field in the KG's `manifest.json`:
   "schedule": {
     "cron": "0 8 * * 1",
     "last_run": null,
-    "trigger_name": "kg-update-<slugified-topic>"
+    "trigger_name": "kg-update-<slugified-topic>",
+    "threshold": 3
   }
 }
 ```

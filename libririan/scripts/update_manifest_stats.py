@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib.frontmatter import parse
@@ -26,6 +27,9 @@ def main():
     parser.add_argument("kg_folder", help="Path to the KG folder")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print computed statistics without writing")
+    parser.add_argument("--stamp-last-run", action="store_true",
+                        help="Set schedule.last_run to the current UTC timestamp "
+                             "(no-op when the manifest has no schedule block)")
     args = parser.parse_args()
 
     kg_folder = args.kg_folder
@@ -125,6 +129,10 @@ def main():
         "quarantined_nodes": quarantined_count,
         "active_nodes": total_nodes - quarantined_count,
     }
+
+    if args.stamp_last_run and isinstance(manifest.get("schedule"), dict):
+        manifest["schedule"]["last_run"] = datetime.now(
+            timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Include PMID ledger stats if ledger exists
     ledger_path = os.path.join(kg_folder, "_pmid_ledger.json")
