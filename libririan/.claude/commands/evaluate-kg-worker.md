@@ -237,4 +237,4 @@ When running as a chunk worker, the orchestrator handles manifest statistics aft
 2. **Do NOT invent or guess reference IDs.** Only use IDs already in the node files or discovered via MCP search during remediation.
 3. **Batch MCP calls efficiently** — no more than 5 in parallel to avoid rate limiting.
 4. **Be thorough.** Read abstracts carefully. A PMID that discusses the same gene but a different mechanism is `unrelated`, not `supported`.
-5. **Write all outputs** (evaluation results file, updated node files, and manifest statistics if applicable) before finishing.
+5. **Write all outputs** (evaluation results file, updated node files, and manifest statistics if applicable) before finishing. When `--no-remediate` is active, "updated node files" means only the node files for passed nodes — failed nodes are left untouched for the escalation worker (see Step E6).

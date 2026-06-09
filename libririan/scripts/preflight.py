@@ -119,6 +119,8 @@ def main():
         with open(args.esearch_fixture, "r", encoding="utf-8") as fh:
             fixture = json.load(fh)
 
+    known_pmids = load_known_pmids(args.kg_folder)
+
     per_query = []
     all_pmids: set[str] = set()
     for i, query in enumerate(profile["sub_queries"]):
@@ -132,12 +134,13 @@ def main():
             except Exception as e:
                 print(f"Error: esearch failed for {query!r}: {e}", file=sys.stderr)
                 sys.exit(1)
-        all_pmids.update(str(p) for p in result.get("idlist", []))
+        ids = {str(p) for p in result.get("idlist", [])}
+        all_pmids.update(ids)
         per_query.append({"query": query,
                           "total_hits": result.get("count", 0),
-                          "returned": len(result.get("idlist", []))})
+                          "novel": len(ids - known_pmids)})
 
-    novel = sorted(all_pmids - load_known_pmids(args.kg_folder))
+    novel = sorted(all_pmids - known_pmids)
 
     report = {
         "kg": os.path.basename(os.path.abspath(args.kg_folder)),

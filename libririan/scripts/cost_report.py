@@ -27,6 +27,7 @@ import sys
 from datetime import datetime, timezone
 
 # USD per million tokens. KEEP CURRENT with platform.claude.com pricing.
+# Last verified: 2026-06-09.
 # cache_write assumes the default 5-minute TTL (1.25x input);
 # cache_read is 0.1x input. Override with --price-file.
 PRICES = {
