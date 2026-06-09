@@ -180,8 +180,8 @@ If any nodes have `overall_status: "error"`, list them explicitly and recommend 
 ## Important Rules
 
 1. **Partitions must be disjoint.** Never assign the same node ID to more than one chunk. Validate this before dispatching.
-2. **Only this orchestrator writes `_evaluation_log.json` and updates manifest statistics** (in parallel mode). Workers write to `_eval_chunk_{N}.json` files only.
-3. **Workers update node `.md` files directly.** This is safe because each worker operates on a disjoint set of nodes.
+2. **Only this orchestrator writes `_evaluation_log.json` and updates manifest statistics** (in both the direct and parallel paths — every worker, including the N≤5 single worker, runs with `--chunk-id`). Workers write to `_eval_chunk_{N}.json` files only.
+3. **Workers update node `.md` files directly** for nodes they finalize. Haiku workers run with `--no-remediate`, so they update only passed nodes; failed nodes are left untouched for the Step 3.5 escalation worker (which runs full remediation and quarantine). This is safe because each worker operates on a disjoint set of nodes.
 4. **Clean up stale chunk files at startup** (Step 0) to handle prior interrupted runs.
 5. **Cap at 3 concurrent agents per wave** to avoid overwhelming MCP API rate limits.
 6. **Retry failed chunks exactly once.** Do not enter retry loops.
