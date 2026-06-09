@@ -14,6 +14,7 @@ Parse `$ARGUMENTS` for:
 - **--sources <source1,source2,...>** (optional): Active data sources used when building this KG (e.g., `pubmed,clinicaltrials,chembl`). Defaults to `pubmed`.
 - **--chunk-id <N>** (optional): If provided, this worker is part of a parallel evaluation. Write results to `_eval_chunk_{N}.json` instead of `_evaluation_log.json`, and skip manifest statistics updates. The orchestrator (`/evaluate-kg`) handles merging and manifest updates.
 - **--test** (optional flag): Run in test mode using mock PubMed fixtures. When set, read article metadata and full text from `tests/fixtures/` instead of calling MCP tools or curl. See "Test Mode" sections in Steps E1, E2, and E4.
+- **--no-remediate** (optional flag): Skip Step E4 entirely. Failed nodes are written to the results array with `overall_status: "failed"` and `notes: "pending escalation"`, and their node files are NOT modified (no quarantine, no frontmatter update). The orchestrator passes this to cheap-model workers so that remediation and quarantine decisions are made only by a stronger escalation worker.
 
 Example invocations:
 ```
@@ -140,6 +141,8 @@ For NCT and ChEMBL references, apply the same logic: does the trial/compound dat
 
 ## Step E4: Remediation
 
+**If `--no-remediate` was passed, skip this entire step.** Record each failed node in the Step E5 results array with `overall_status: "failed"` and `notes: "pending escalation"`. Do NOT search for replacement references, do NOT edit the node file, and do NOT set `quarantined` — the orchestrator escalates failed nodes to a stronger worker that runs full remediation.
+
 #### Test Mode (if `--test` is set) — replaces the normal PubMed re-search
 
 For failed nodes, **do NOT call any PubMed MCP tools or curl.** Instead:
@@ -195,7 +198,7 @@ Build the evaluation entries array:
 ## Step E6: Update Node Files and Manifest
 
 **Always** (both chunk and direct modes):
-Use the frontmatter update script to set evaluation results on each node. For each evaluated node, run:
+Use the frontmatter update script to set evaluation results on each node. **Exception: if `--no-remediate` was passed, only update nodes that passed — leave failed nodes' frontmatter untouched (the escalation worker sets their final status).** For each node to update, run:
 ```
 python3 scripts/update_frontmatter.py {node_path} '{json_updates}'
 ```
