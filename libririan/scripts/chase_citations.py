@@ -32,8 +32,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from check_retractions import collect_used_pmids
 from preflight import load_known_pmids
+from append_log import append_entry
 
 EUTILS_ELINK = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi"
+ICITE_API = "https://icite.od.nih.gov/api/pubs"
 REFS_LINKNAME = "pubmed_pubmed_refs"
 
 
@@ -91,6 +93,36 @@ def _build_link_fn(args, api_key):
     return live
 
 
+def rcr_lookup(pmids: list[str], icite_fixture: str | None) -> tuple[dict, str]:
+    """Return ({pmid: rcr|None}, status). Best-effort: any live failure -> all None, 'unavailable'."""
+    if not pmids:
+        return {}, "ok"
+    if icite_fixture is not None:
+        with open(icite_fixture, "r", encoding="utf-8") as fh:
+            fx = json.load(fh)
+        return ({p: fx.get(p) for p in pmids}, "ok")
+    try:
+        params = {"pmids": ",".join(pmids), "legacy": "false"}
+        url = ICITE_API + "?" + urllib.parse.urlencode(params)
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            data = json.load(resp)
+        out = {p: None for p in pmids}
+        for rec in data.get("data", []):
+            out[str(rec.get("pmid"))] = rec.get("relative_citation_ratio")
+        return out, "ok"
+    except Exception:
+        return ({p: None for p in pmids}, "unavailable")
+
+
+def rank_candidates(candidates: dict, rcr_map: dict, min_cocitation: int, top_n: int) -> list[dict]:
+    """Filter by min co-citation, sort by (-count, -rcr, pmid), cap at top_n."""
+    rows = [{"pmid": p, "cocitation_count": c["cocitation_count"],
+             "rcr": rcr_map.get(p), "referenced_by": sorted(c["referenced_by"])}
+            for p, c in candidates.items() if c["cocitation_count"] >= min_cocitation]
+    rows.sort(key=lambda c: (-c["cocitation_count"], -(c["rcr"] or 0.0), c["pmid"]))
+    return rows[:top_n]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Deterministic citation-chasing discovery feed.")
     parser.add_argument("kg_folder", help="Path to the KG folder")
@@ -118,21 +150,28 @@ def main():
     known = load_known_pmids(args.kg_folder)
     candidates = build_candidates(refs_by_seed, known)
 
-    feed = sorted(
-        ({"pmid": p, "cocitation_count": c["cocitation_count"],
-          "referenced_by": sorted(c["referenced_by"])}
-         for p, c in candidates.items()),
-        key=lambda c: (-c["cocitation_count"], c["pmid"]))
+    survivors = sorted(p for p, c in candidates.items()
+                       if c["cocitation_count"] >= args.min_cocitation)
+    rcr_map, icite_status = rcr_lookup(survivors, args.icite_fixture)
+    feed = rank_candidates(candidates, rcr_map, args.min_cocitation, args.top_n)
 
     summary = {"kg": os.path.basename(os.path.abspath(args.kg_folder)),
                "seed_count": len(seeds), "candidate_count": len(feed),
-               "candidates": feed}
+               "icite_status": icite_status, "candidates": feed}
+
+    try:
+        append_entry(args.kg_folder, "citation",
+                     f"Citation chase: {len(feed)} candidates from {len(seeds)} cited PMIDs "
+                     f"(min co-citation {args.min_cocitation}, top {args.top_n}); iCite {icite_status}.")
+    except Exception:
+        pass  # never fail the sweep over logging
+
     if args.json:
         json.dump(summary, sys.stdout, indent=2)
         print()
     else:
-        print(f"Citation chase: {len(feed)} candidates from {len(seeds)} cited PMIDs.",
-              file=sys.stderr)
+        print(f"Citation chase: {len(feed)} candidates from {len(seeds)} cited PMIDs; "
+              f"iCite {icite_status}.", file=sys.stderr)
 
 
 if __name__ == "__main__":

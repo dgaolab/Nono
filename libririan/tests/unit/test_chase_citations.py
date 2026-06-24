@@ -63,3 +63,68 @@ def test_cli_discovery_with_fixture(tmp_path):
     assert "old" not in pmids                       # already in ledger
     assert pmids["aaa"]["cocitation_count"] == 2
     assert pmids["bbb"]["cocitation_count"] == 1
+
+
+def test_rank_candidates_orders_by_cocitation_then_rcr():
+    candidates = {
+        "aaa": {"cocitation_count": 3, "referenced_by": ["111", "222", "333"]},
+        "bbb": {"cocitation_count": 2, "referenced_by": ["111", "222"]},
+        "ccc": {"cocitation_count": 2, "referenced_by": ["111", "333"]},
+        "ddd": {"cocitation_count": 1, "referenced_by": ["111"]},
+    }
+    rcr = {"aaa": 1.0, "bbb": 0.5, "ccc": 9.9, "ddd": 50.0}
+    ranked = chase_citations.rank_candidates(candidates, rcr, min_cocitation=2, top_n=10)
+    # ddd dropped (below min); aaa first (count 3); ccc before bbb (count tie, higher RCR)
+    assert [c["pmid"] for c in ranked] == ["aaa", "ccc", "bbb"]
+    assert ranked[0]["rcr"] == 1.0
+
+
+def test_rank_candidates_caps_top_n():
+    candidates = {p: {"cocitation_count": 2, "referenced_by": ["111", "222"]}
+                  for p in ["a", "b", "c", "d"]}
+    ranked = chase_citations.rank_candidates(candidates, {}, min_cocitation=2, top_n=2)
+    assert len(ranked) == 2
+
+
+def test_rank_candidates_null_rcr_sorts_last_and_stable_by_pmid():
+    candidates = {
+        "200": {"cocitation_count": 2, "referenced_by": ["111", "222"]},
+        "100": {"cocitation_count": 2, "referenced_by": ["111", "222"]},
+    }
+    ranked = chase_citations.rank_candidates(candidates, {"200": None, "100": None},
+                                             min_cocitation=2, top_n=10)
+    # equal count, both rcr None -> tiebreak by pmid ascending
+    assert [c["pmid"] for c in ranked] == ["100", "200"]
+    assert ranked[0]["rcr"] is None
+
+
+def test_rcr_lookup_fixture(tmp_path):
+    fixture = tmp_path / "icite.json"
+    fixture.write_text(json.dumps({"111": 4.2}), encoding="utf-8")
+    rcr_map, status = chase_citations.rcr_lookup(["111", "222"], str(fixture))
+    assert status == "ok"
+    assert rcr_map["111"] == 4.2 and rcr_map["222"] is None
+
+
+def test_cli_feed_has_rcr_and_icite_status(tmp_path):
+    kg = tmp_path / "KG_Test"
+    kg.mkdir()
+    _write_ledger(kg, {
+        "111": {"disposition": "used", "first_seen": "x", "last_checked": "x", "assigned_nodes": ["node_001"]},
+        "222": {"disposition": "used", "first_seen": "x", "last_checked": "x", "assigned_nodes": ["node_002"]},
+    })
+    (kg / "_log.md").write_text("", encoding="utf-8")
+    elink = tmp_path / "elink.json"
+    elink.write_text(json.dumps({"111": ["aaa", "bbb"], "222": ["aaa"]}), encoding="utf-8")
+    icite = tmp_path / "icite.json"
+    icite.write_text(json.dumps({"aaa": 7.0}), encoding="utf-8")
+    res = subprocess.run([sys.executable, SCRIPT, str(kg), "--min-cocitation", "1", "--top-n", "5",
+                          "--elink-fixture", str(elink), "--icite-fixture", str(icite), "--json"],
+                         capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    out = json.loads(res.stdout)
+    assert out["icite_status"] == "ok"
+    top = out["candidates"][0]
+    assert top["pmid"] == "aaa" and top["cocitation_count"] == 2 and top["rcr"] == 7.0
+    # log entry written
+    assert "citation |" in (kg / "_log.md").read_text()
