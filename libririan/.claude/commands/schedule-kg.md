@@ -45,9 +45,18 @@ Use the `/schedule` skill to create a remote trigger with:
 ```
 This is a scheduled KG update run for <KG_FolderName>.
 
+0. First run the deterministic retraction sweep over the whole KG (no MCP, no LLM):
+   ```
+   python3 scripts/check_retractions.py <KG_FolderName> --json
+   ```
+   Keep the JSON `retractions` array from its output. It must be carried into the
+   `retractions` field of whichever run-record you write later this session (the
+   build/update record if the update proceeds, or the skip record if preflight
+   gates it). The sweep mutates the ledger/nodes itself; you only carry its summary.
+   If the sweep exits non-zero, proceed anyway with an empty `retractions` list.
 1. First run the deterministic preflight check (no MCP tools, no KG loading):
    python3 scripts/preflight.py <KG_FolderName> --threshold <threshold> --log
-2. If the JSON output has "proceed": false, write a skip run-record and digest, then report one line and STOP. Build `<KG_FolderName>/runs/<run_id>.json` with `run_id` = `<UTC-timestamp-no-colons>Z-v<current manifest version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. The record must include: `kg_name` (the KG folder name), `timestamp` (the run's UTC time in ISO-8601 format), `version` (current manifest version — same version used in run_id), `mode: "skip"`, `since_date` and `preflight: {novel_count, threshold}` from the preflight JSON, empty `nodes_created`/`nodes_revised`/`refs_added`/`refs_failed`, `eval_summary: {evaluated: 0, passed: 0, failed: 0}`, and `cost_session_id: null`. Then run:
+2. If the JSON output has "proceed": false, write a skip run-record and digest, then report one line and STOP. Build `<KG_FolderName>/runs/<run_id>.json` with `run_id` = `<UTC-timestamp-no-colons>Z-v<current manifest version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. The record must include: `kg_name` (the KG folder name), `timestamp` (the run's UTC time in ISO-8601 format), `version` (current manifest version — same version used in run_id), `mode: "skip"`, `since_date` and `preflight: {novel_count, threshold}` from the preflight JSON, empty `nodes_created`/`nodes_revised`/`refs_added`/`refs_failed`, `eval_summary: {evaluated: 0, passed: 0, failed: 0}`, and `cost_session_id: null`, and `retractions` (the array from the Step 0 sweep output, or `[]` if none), per `schemas/run_record_schema.json`. Then run:
    ```
    python3 scripts/render_digest.py <KG_FolderName> --run-record <KG_FolderName>/runs/<run_id>.json
    ```
