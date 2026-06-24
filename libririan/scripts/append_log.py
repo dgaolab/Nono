@@ -4,7 +4,7 @@
 Usage:
     python3 scripts/append_log.py <kg_folder> --op <operation> --summary "text"
 
-Operations: build, update, evaluate, link, query, lint, schedule, preflight
+Operations: build, update, evaluate, link, query, lint, schedule, preflight, digest
 
 Entries are prepended (reverse chronological, newest on top) with a
 grep-parseable prefix:
@@ -19,7 +19,7 @@ import tempfile
 from datetime import datetime, timezone
 
 
-VALID_OPS = {"build", "update", "evaluate", "link", "query", "lint", "schedule", "preflight"}
+VALID_OPS = {"build", "update", "evaluate", "link", "query", "lint", "schedule", "preflight", "digest"}
 
 
 def append_entry(kg_folder: str, op: str, summary: str, details: str = "") -> str:

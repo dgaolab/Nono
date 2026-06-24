@@ -47,7 +47,11 @@ This is a scheduled KG update run for <KG_FolderName>.
 
 1. First run the deterministic preflight check (no MCP tools, no KG loading):
    python3 scripts/preflight.py <KG_FolderName> --threshold <threshold> --log
-2. If the JSON output has "proceed": false, report exactly one line — "Quiet week: {novel_count} novel PMIDs since {since_date}, below threshold {threshold} — skipped update." — and STOP. Do not load the KG and do not call any MCP tools.
+2. If the JSON output has "proceed": false, write a skip run-record and digest, then report one line and STOP. Build `<KG_FolderName>/runs/<run_id>.json` with `run_id` = `<UTC-timestamp-no-colons>Z-v<current manifest version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. The record must include: `kg_name` (the KG folder name), `timestamp` (the run's UTC time in ISO-8601 format), `version` (current manifest version — same version used in run_id), `mode: "skip"`, `since_date` and `preflight: {novel_count, threshold}` from the preflight JSON, empty `nodes_created`/`nodes_revised`/`refs_added`/`refs_failed`, `eval_summary: {evaluated: 0, passed: 0, failed: 0}`, and `cost_session_id: null`. Then run:
+   ```
+   python3 scripts/render_digest.py <KG_FolderName> --run-record <KG_FolderName>/runs/<run_id>.json
+   ```
+   Then report exactly one line — "Quiet week: {novel_count} novel PMIDs since {since_date}, below threshold {threshold} — skipped update." — and STOP. Do not load the KG and do not call any MCP tools.
 3. If preflight exits non-zero (network error, or a legacy manifest without search_profile), fall through to step 4 anyway — a wasted full run is better than a silently skipped update.
 4. Otherwise run: /build-kg "<topic>" --output <KG_FolderName>
    The KG already exists, so this runs in UPDATE mode: it derives its date window from schedule.last_run and stamps schedule.last_run when it finishes (Phase 4 step 1d). Focus on new research that adds to or revises existing knowledge nodes.

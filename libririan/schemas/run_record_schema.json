@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KG Run Record",
+  "type": "object",
+  "required": ["run_id", "kg_name", "mode", "timestamp", "version",
+               "nodes_created", "nodes_revised", "refs_added", "refs_failed",
+               "eval_summary"],
+  "properties": {
+    "run_id": {"type": "string"},
+    "kg_name": {"type": "string"},
+    "mode": {"type": "string", "enum": ["build", "update", "skip"]},
+    "timestamp": {"type": "string"},
+    "version": {"type": "integer", "minimum": 1},
+    "since_date": {"type": ["string", "null"]},
+    "preflight": {
+      "type": ["object", "null"],
+      "properties": {
+        "novel_count": {"type": "integer", "minimum": 0},
+        "threshold": {"type": "integer", "minimum": 0}
+      }
+    },
+    "nodes_created": {"type": "array", "items": {"type": "string"}},
+    "nodes_revised": {"type": "array", "items": {"type": "string"}},
+    "refs_added": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pmid", "nodes"],
+        "properties": {
+          "pmid": {"type": "string"},
+          "nodes": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "refs_failed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pmid", "node", "reason"],
+        "properties": {
+          "pmid": {"type": "string"},
+          "node": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "eval_summary": {
+      "type": "object",
+      "required": ["evaluated", "passed", "failed"],
+      "properties": {
+        "evaluated": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "cost_session_id": {"type": ["string", "null"]}
+  }
+}
