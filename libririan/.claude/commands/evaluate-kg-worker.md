@@ -127,6 +127,8 @@ Evaluate:
 
 Assign a verdict per PMID: `supported`, `partially_supported`, `not_supported`, `unrelated`.
 
+For each PMID you rate `supported` or `partially_supported`, capture **1-3 verbatim excerpts** (each ≤ ~2 sentences) from the article text you just read — the exact sentence(s) your verdict rests on. Record each excerpt with its source section: `abstract` or `full_text`. Copy text verbatim (no paraphrasing). You already have the article text in context, so this requires no additional fetch. Do **not** capture quotes for `not_supported` or `unrelated` references.
+
 For NCT and ChEMBL references, apply the same logic: does the trial/compound data actually support the node's claim?
 
 ---
@@ -177,7 +179,10 @@ Build the evaluation entries array:
         "exists": true,
         "article_title": "...",
         "verdict": "supported",
-        "reasoning": "The abstract states X, which directly supports the node's claim about X."
+        "reasoning": "The abstract states X, which directly supports the node's claim about X.",
+        "quotes": [
+          {"text": "At 12 weeks, 40.2% of patients achieved a response versus 11.1% with placebo.", "source": "abstract"}
+        ]
       }
     ],
     "nct_checks": [],
@@ -207,14 +212,14 @@ Where `{json_updates}` is a JSON object containing the fields to update. For exa
 ```bash
 # Passed evaluation — ensure quarantined is false (un-quarantine on re-eval)
 python3 scripts/update_frontmatter.py KG_X/nodes/node_001_foo.md \
-  '{"evaluation_status": "passed", "quarantined": false, "pubmed_ids": [{"pmid": "35486828", "verified": true}]}'
+  '{"evaluation_status": "passed", "quarantined": false, "pubmed_ids": [{"pmid": "35486828", "verified": true, "quotes": [{"text": "At 12 weeks, 40.2% of patients achieved a response versus 11.1% with placebo.", "source": "abstract"}]}]}'
 
 # Failed evaluation — quarantine the node
 python3 scripts/update_frontmatter.py KG_X/nodes/node_001_foo.md \
   '{"evaluation_status": "failed", "quarantined": true}'
 ```
 
-The script deep-merges the updates into the existing frontmatter — it matches PMID entries by their `pmid` value, so only the `verified` field is changed on matching entries. New entries are appended.
+The script deep-merges the updates into the existing frontmatter — it matches PMID entries by their `pmid` value, so the `verified` field and the `quotes` list are set on matching entries. On re-evaluation the `quotes` list is replaced wholesale (the latest verification wins), not appended. New entries are appended.
 
 For complex updates with shell-escaping concerns, write the JSON to a temp file and use `--updates-file`:
 ```bash
