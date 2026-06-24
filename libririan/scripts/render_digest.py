@@ -137,11 +137,11 @@ def render(run_record: dict, eval_index: dict, node_titles: dict,
     lines.append("## What changed")
     lines.append("")
     for nid in run_record.get("nodes_created", []):
-        lines.append(f"**New:**")
+        lines.append("**New:**")
         lines.extend(_node_block(nid, node_titles.get(nid, nid),
                                  _all_refs_for(nid, eval_index), eval_index))
     for nid in run_record.get("nodes_revised", []):
-        lines.append(f"**Revised:**")
+        lines.append("**Revised:**")
         lines.extend(_node_block(nid, node_titles.get(nid, nid),
                                  _refs_added_for(nid, run_record), eval_index))
     lines.extend(_failures(run_record, eval_index, node_titles))

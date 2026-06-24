@@ -47,7 +47,7 @@ This is a scheduled KG update run for <KG_FolderName>.
 
 1. First run the deterministic preflight check (no MCP tools, no KG loading):
    python3 scripts/preflight.py <KG_FolderName> --threshold <threshold> --log
-2. If the JSON output has "proceed": false, write a skip run-record and digest, then report one line and STOP. Build `<KG_FolderName>/runs/<run_id>.json` with `run_id` = `<UTC-timestamp-no-colons>Z-v<current manifest version>`, `mode: "skip"`, `since_date` and `preflight: {novel_count, threshold}` from the preflight JSON, empty `nodes_created`/`nodes_revised`/`refs_added`/`refs_failed`, and `eval_summary: {evaluated: 0, passed: 0, failed: 0}`. Then run:
+2. If the JSON output has "proceed": false, write a skip run-record and digest, then report one line and STOP. Build `<KG_FolderName>/runs/<run_id>.json` with `run_id` = `<UTC-timestamp-no-colons>Z-v<current manifest version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. The record must include: `kg_name` (the KG folder name), `timestamp` (the run's UTC time in ISO-8601 format), `version` (current manifest version — same version used in run_id), `mode: "skip"`, `since_date` and `preflight: {novel_count, threshold}` from the preflight JSON, empty `nodes_created`/`nodes_revised`/`refs_added`/`refs_failed`, `eval_summary: {evaluated: 0, passed: 0, failed: 0}`, and `cost_session_id: null`. Then run:
    ```
    python3 scripts/render_digest.py <KG_FolderName> --run-record <KG_FolderName>/runs/<run_id>.json
    ```

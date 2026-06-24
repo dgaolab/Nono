@@ -571,7 +571,9 @@ In BUILD mode, do not generate a changelog.
    python3 scripts/update_manifest_stats.py {KG_FOLDER} --stamp-last-run
    ```
 
-1e. Write the run-record and render the digest. Build `runs/<run_id>.json` where `run_id` is `<UTC-timestamp-with-colons-removed>Z-v<version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. Populate it from this run's changelog buffer (Phase 2):
+1e. Write the run-record and render the digest. Build `runs/<run_id>.json` where `run_id` is `<UTC-timestamp-no-colons>Z-v<version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. Populate it from this run's changelog buffer (Phase 2):
+   - `kg_name`: the KG folder name.
+   - `timestamp`: ISO-8601 UTC time of this run.
    - `mode`: `"build"` for an initial build, `"update"` otherwise.
    - `since_date`: the UPDATE window start, or `null` for an initial build.
    - `preflight`: `{novel_count, threshold}` if this run came from a scheduled preflight, else `null`.
