@@ -52,6 +52,7 @@ class KGLinter:
         "evidence_tier_imbalance",
         "tag_coverage_gaps",
         "duplicate_entities",
+        "quote_health",
     ]
 
     def __init__(self, kg_folder: str):
@@ -455,6 +456,47 @@ class KGLinter:
                 self._add("duplicate_entities", "info",
                           f"Entity {norm_id} has inconsistent names: {', '.join(sorted(names))}",
                           details={"normalized_id": norm_id, "variants": locations})
+
+    # ------------------------------------------------------------------
+    # Check 12: Supporting-quote presence and shape
+    # ------------------------------------------------------------------
+    def check_quote_health(self):
+        valid_sources = {"abstract", "full_text"}
+        for nid, fm in self.node_fm.items():
+            for ref in fm.get("pubmed_ids", []) or []:
+                pmid = ref.get("pmid", "?")
+                quotes = ref.get("quotes")
+
+                # Shape validation (warning) — only when quotes is present.
+                if quotes is not None:
+                    problems = []
+                    if not isinstance(quotes, list):
+                        problems.append("quotes is not a list")
+                    else:
+                        if len(quotes) > 3:
+                            problems.append(f"{len(quotes)} quotes (max 3)")
+                        for q in quotes:
+                            if not isinstance(q, dict):
+                                problems.append("quote item is not a mapping")
+                                continue
+                            if not (q.get("text") or "").strip():
+                                problems.append("quote has empty text")
+                            if q.get("source") not in valid_sources:
+                                problems.append(f"bad source {q.get('source')!r}")
+                    if problems:
+                        self._add("quote_health", "warning",
+                                  f"Node {nid} PMID {pmid} has malformed quotes: "
+                                  + "; ".join(problems),
+                                  node_id=nid,
+                                  details={"pmid": pmid, "problems": problems})
+                        continue
+
+                # Presence (info) — verified ref carrying no quotes.
+                if ref.get("verified") is True and not quotes:
+                    self._add("quote_health", "info",
+                              f"Node {nid} PMID {pmid} is verified but has no supporting quote",
+                              node_id=nid,
+                              details={"pmid": pmid})
 
     # ------------------------------------------------------------------
     # Semantic check candidates (pre-computed for LLM phase)
