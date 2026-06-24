@@ -14,6 +14,7 @@ Parse `$ARGUMENTS` for one of these modes:
 - **--cron** (optional): Cron expression. Defaults to `0 8 * * 1` (every Monday 8am)
 - **--output** (optional): Target KG folder name
 - **--threshold <N>** (optional): Minimum novel PMIDs (per the preflight check) required to run a scheduled update. Defaults to 3. Recorded as `schedule.threshold` in the manifest and substituted into the scheduled prompt.
+- **--with-citation-chase** (optional): If set, the scheduled run also runs the deterministic citation-chasing discovery sweep (`scripts/chase_citations.py`) and records its ranked candidate feed in the run-record's `citation_candidates` field (surfaced in the digest). Recorded as `schedule.citation_chase: true` in the manifest and substituted into the scheduled prompt. Off by default — citation chasing is a growth feature, opt-in per KG.
 
 ### List active schedules:
 ```
@@ -54,9 +55,18 @@ This is a scheduled KG update run for <KG_FolderName>.
    build/update record if the update proceeds, or the skip record if preflight
    gates it). The sweep mutates the ledger/nodes itself; you only carry its summary.
    If the sweep exits non-zero, proceed anyway with an empty `retractions` list.
+0b. ONLY IF this KG has `schedule.citation_chase: true` in its manifest: run the deterministic citation-chasing discovery sweep (no MCP, no LLM, read-only):
+   ```
+   python3 scripts/chase_citations.py <KG_FolderName> --json
+   ```
+   Keep the JSON `candidates` array from its output. It must be carried into the
+   `citation_candidates` field of whichever run-record you write later this session
+   (the build/update record, or the skip record on a quiet week). The sweep is
+   read-only; you only carry its candidate list. If the sweep exits non-zero, or the
+   KG does not have `schedule.citation_chase: true`, proceed with no `citation_candidates`.
 1. First run the deterministic preflight check (no MCP tools, no KG loading):
    python3 scripts/preflight.py <KG_FolderName> --threshold <threshold> --log
-2. If the JSON output has "proceed": false, write a skip run-record and digest, then report one line and STOP. Build `<KG_FolderName>/runs/<run_id>.json` with `run_id` = `<UTC-timestamp-no-colons>Z-v<current manifest version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. The record must include: `kg_name` (the KG folder name), `timestamp` (the run's UTC time in ISO-8601 format), `version` (current manifest version — same version used in run_id), `mode: "skip"`, `since_date` and `preflight: {novel_count, threshold}` from the preflight JSON, empty `nodes_created`/`nodes_revised`/`refs_added`/`refs_failed`, `eval_summary: {evaluated: 0, passed: 0, failed: 0}`, and `cost_session_id: null`, and `retractions` (the array from the Step 0 sweep output, or `[]` if none), per `schemas/run_record_schema.json`. Then run:
+2. If the JSON output has "proceed": false, write a skip run-record and digest, then report one line and STOP. Build `<KG_FolderName>/runs/<run_id>.json` with `run_id` = `<UTC-timestamp-no-colons>Z-v<current manifest version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. The record must include: `kg_name` (the KG folder name), `timestamp` (the run's UTC time in ISO-8601 format), `version` (current manifest version — same version used in run_id), `mode: "skip"`, `since_date` and `preflight: {novel_count, threshold}` from the preflight JSON, empty `nodes_created`/`nodes_revised`/`refs_added`/`refs_failed`, `eval_summary: {evaluated: 0, passed: 0, failed: 0}`, and `cost_session_id: null`, and `retractions` (the array from the Step 0 sweep output, or `[]` if none), and `citation_candidates` (the `candidates` array from the Step 0b sweep, or omit if citation chasing is off or the sweep produced none), per `schemas/run_record_schema.json`. Then run:
    ```
    python3 scripts/render_digest.py <KG_FolderName> --run-record <KG_FolderName>/runs/<run_id>.json
    ```

@@ -170,3 +170,17 @@ def test_retractions_section_renders_when_present():
 def test_no_retractions_section_when_absent():
     out = render(update_record(), eval_index(), titles(), stats(), {"status": "unavailable"})
     assert "## Retractions" not in out
+
+
+def test_citation_candidates_section_renders_when_present():
+    rec = update_record()
+    rec["citation_candidates"] = [
+        {"pmid": "777", "cocitation_count": 3, "rcr": 2.1, "referenced_by": ["node_003"]}]
+    out = render(rec, eval_index(), titles(), stats(), {"status": "unavailable"})
+    assert "Citation candidates" in out
+    assert "777" in out and "3" in out and "2.1" in out
+
+
+def test_no_citation_candidates_section_when_absent():
+    out = render(update_record(), eval_index(), titles(), stats(), {"status": "unavailable"})
+    assert "## Citation candidates" not in out

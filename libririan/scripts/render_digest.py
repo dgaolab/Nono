@@ -118,6 +118,19 @@ def _retractions(rr: dict) -> list[str]:
     return lines
 
 
+def _citation_candidates(rr: dict) -> list[str]:
+    items = rr.get("citation_candidates") or []
+    if not items:
+        return []
+    lines = ["## Citation candidates"]
+    for c in items:
+        rcr = c.get("rcr")
+        rcr_str = f", RCR {rcr}" if rcr is not None else ""
+        lines.append(f"- PMID {c.get('pmid')} — cited by {c.get('cocitation_count')} node ref(s){rcr_str}")
+    lines.append("")
+    return lines
+
+
 def render(run_record: dict, eval_index: dict, node_titles: dict,
            stats: dict, cost: dict) -> str:
     """Render the digest markdown. Pure function of its inputs."""
@@ -144,6 +157,7 @@ def render(run_record: dict, eval_index: dict, node_titles: dict,
         lines.extend(_failures(run_record, eval_index, node_titles))
         lines.extend(_retractions(run_record))
         lines.extend(_totals(stats, cost))
+        lines.extend(_citation_candidates(run_record))
         return "\n".join(lines)
 
     # update mode — full audit body
@@ -160,6 +174,7 @@ def render(run_record: dict, eval_index: dict, node_titles: dict,
     lines.extend(_failures(run_record, eval_index, node_titles))
     lines.extend(_retractions(run_record))
     lines.extend(_totals(stats, cost))
+    lines.extend(_citation_candidates(run_record))
     return "\n".join(lines)
 
 

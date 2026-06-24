@@ -582,6 +582,7 @@ In BUILD mode, do not generate a changelog.
    - `eval_summary`: `{evaluated, passed, failed}` from Phase 3.
    - `cost_session_id`: this session's id if known, else `null`.
    - `retractions`: the `retractions` array from the scheduled run's retraction sweep (Step 0 of the scheduled prompt), or omit/`[]` for a manual run with no sweep.
+   - `citation_candidates`: the `candidates` array from the scheduled run's citation-chasing sweep (Step 0b of the scheduled prompt, only when `schedule.citation_chase` is set), or omit for a manual run or when citation chasing is off.
 
    Then render the digest:
    ```

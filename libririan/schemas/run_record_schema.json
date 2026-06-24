@@ -65,6 +65,19 @@
           "action": {"type": "string", "enum": ["flagged", "quarantined"]}
         }
       }
+    },
+    "citation_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pmid", "cocitation_count", "referenced_by"],
+        "properties": {
+          "pmid": {"type": "string"},
+          "cocitation_count": {"type": "integer", "minimum": 1},
+          "rcr": {"type": ["number", "null"]},
+          "referenced_by": {"type": "array", "items": {"type": "string"}}
+        }
+      }
     }
   }
 }
