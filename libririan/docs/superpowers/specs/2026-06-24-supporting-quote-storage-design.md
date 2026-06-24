@@ -119,31 +119,50 @@ Quotes ride the existing `update_frontmatter.py` deep-merge path
 `scripts/lib/frontmatter.py` `_IDENTITY_KEYS`), so the update lands on the right
 reference.
 
-**Merge semantics (the one shared-code change):** on re-evaluation, the `quotes`
-list on a matched PMID entry must be **replaced wholesale** (latest verification
-wins), *not* set-unioned. Without this, re-runs would accumulate stale quotes.
-This requires an explicit rule in `frontmatter.py`'s merge logic so that, within
-a matched `pubmed_ids` entry, the nested `quotes` list is overwritten rather than
-recursively merged or unioned. Quotes on *other* PMID entries must remain
-untouched.
+**Merge semantics:** on re-evaluation, the `quotes` list on a matched PMID entry
+must be **replaced wholesale** (latest verification wins), *not* set-unioned —
+otherwise re-runs would accumulate stale quotes. The existing merge logic
+already satisfies this: `_merge_list_of_dicts` in `scripts/lib/frontmatter.py`
+matches a `pubmed_ids` entry by `pmid` and then does a **flat field overwrite**
+(`existing[field] = val`) without recursing, so a nested `quotes` list is
+replaced, and quotes on other PMID entries are untouched. **No code change is
+needed**; this behavior is locked with a characterization test so a future
+refactor cannot silently turn it into a union or deep-merge.
 
-## Schema and template
+## Schema, template, and validation
 
-- **`schemas/graph_schema.json`** — add `quotes` to the `pubmed_ids` items
-  definition: optional `array`, `minItems: 1`, `maxItems: 3`, each item an object with
-  `text` (string, required) and `source` (enum: `abstract`, `full_text`,
-  required).
+Node frontmatter is **not** governed by a JSON schema in this project —
+`schemas/graph_schema.json` validates the *manifest*, whose per-node
+`pubmed_ids` is a plain string array (it carries no `supports`/`verified` and
+will carry no `quotes`). There is therefore no JSON-schema file to extend, and
+the manifest is left unchanged (preserving the phase-one cost wins).
+
+- **`schemas/graph_schema.json`** — **no change.** Quotes never enter the
+  manifest.
 - **`templates/node_template.md`** — add a commented `quotes` example under
   `pubmed_ids` so node authors and the worker see the shape.
-- **Manifest schema** — no change.
+- **Quote-shape validation** lives in the linter (`scripts/linter_kg.py`), the
+  existing home for node-frontmatter checks, since there is no schema layer:
+  - **Info-level:** a `verified: true` reference with no `quotes` (the
+    digest-coverage signal described under "Linter" below).
+  - **Warning-level:** a malformed `quotes` value — more than 3 items, an empty
+    `text`, or a `source` outside `{abstract, full_text}`. This validates
+    *shape*, not verbatim fidelity (verbatim remains instruction-enforced, as
+    the source text is not persisted).
 
 ## Linter — `linter-kg`
 
-Add an **info-level** check: for any reference with `verified: true` that has no
-`quotes`, emit an informational note (e.g. "passing reference has no supporting
-quote"). This is **not** a warning or error — legacy and not-yet-re-evaluated
-nodes legitimately lack quotes. The note exists to track digest-coverage growth,
-not to fail lint.
+Add a check (reading the already-parsed `self.node_fm` frontmatter) with two
+severities:
+
+- **Info-level:** a reference with `verified: true` and no `quotes` — an
+  informational note (e.g. "passing reference has no supporting quote"). This is
+  **not** a warning or error; legacy and not-yet-re-evaluated nodes legitimately
+  lack quotes. It exists to track digest-coverage growth, not to fail lint.
+- **Warning-level:** a malformed `quotes` value on any reference — more than 3
+  items, an item with empty/missing `text`, or a `source` outside
+  `{abstract, full_text}`. This is the shape guard that substitutes for the
+  absent JSON-schema layer.
 
 ## Edge cases
 
@@ -159,15 +178,19 @@ not to fail lint.
 
 ## Testing
 
-- **Schema:** accepts a valid `quotes` array; rejects `maxItems > 3` and an
-  invalid `source` value.
-- **Merge (`frontmatter.py`):** re-evaluating a node **replaces** the matched
-  PMID's quotes (no accumulation across runs) and leaves other PMIDs' quotes
-  untouched.
-- **Worker output:** extend the existing eval-worker test expectations so a
-  passing node's frontmatter carries `quotes` with `text` + `source`.
-- **Linter:** a passing reference without quotes produces an info-level note and
-  does not fail lint.
+- **Merge (`frontmatter.py`):** characterization test — re-evaluating a node
+  **replaces** the matched PMID's quotes (no accumulation across runs), leaves
+  other PMIDs' quotes untouched, and appends quotes carried by a brand-new PMID.
+- **Linter — info:** a `verified: true` reference without quotes produces an
+  info-level finding and does not raise the error/warning counts.
+- **Linter — warning:** a `quotes` value with >3 items, empty `text`, or a bad
+  `source` produces a warning-level finding.
+- **Template:** `templates/node_template.md` still parses as valid frontmatter
+  after the commented `quotes` example is added.
+
+The worker's E2 capture and E6 write-back are LLM-driven prose changes, verified
+by reading the edited command and by a `--test`-mode smoke run — not by a unit
+test (the extraction is non-deterministic and cannot be asserted exactly).
 
 ## Out of scope / follow-ups
 
