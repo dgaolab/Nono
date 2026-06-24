@@ -89,3 +89,22 @@ def test_retractions_bad_action_rejected():
         assert False, "expected ValidationError"
     except jsonschema.ValidationError:
         pass
+
+
+def test_citation_candidates_array_is_valid():
+    rec = valid_update_record()
+    rec["citation_candidates"] = [
+        {"pmid": "777", "cocitation_count": 3, "rcr": 2.1, "referenced_by": ["111", "222", "333"]},
+        {"pmid": "888", "cocitation_count": 2, "rcr": None, "referenced_by": ["111", "222"]},
+    ]
+    jsonschema.validate(rec, load_schema())
+
+
+def test_citation_candidates_missing_pmid_rejected():
+    rec = valid_update_record()
+    rec["citation_candidates"] = [{"cocitation_count": 3, "referenced_by": ["111"]}]
+    try:
+        jsonschema.validate(rec, load_schema())
+        assert False, "expected ValidationError"
+    except jsonschema.ValidationError:
+        pass
