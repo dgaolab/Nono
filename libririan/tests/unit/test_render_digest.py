@@ -101,3 +101,59 @@ def test_render_is_deterministic():
     a = render(update_record(), eval_index(), titles(), stats(), {"status": "unavailable"})
     b = render(update_record(), eval_index(), titles(), stats(), {"status": "unavailable"})
     assert a == b
+
+
+import json
+
+
+def _make_kg(tmp_path, run_record, eval_log, manifest_stats, manifest_nodes):
+    kg = tmp_path / "KG_Topic"
+    kg.mkdir()
+    (kg / "runs").mkdir()
+    rr_path = kg / "runs" / (run_record["run_id"] + ".json")
+    rr_path.write_text(json.dumps(run_record), encoding="utf-8")
+    (kg / "_evaluation_log.json").write_text(json.dumps(eval_log), encoding="utf-8")
+    (kg / "manifest.json").write_text(json.dumps(
+        {"kg_name": "KG_Topic", "nodes": manifest_nodes, "statistics": manifest_stats}),
+        encoding="utf-8")
+    return str(kg), str(rr_path)
+
+
+def test_generate_writes_digest_and_pointer(tmp_path):
+    from render_digest import generate
+    nodes = [{"id": "node_016", "title": "New concept"}, {"id": "node_003", "title": "Existing concept"}]
+    kg, rr = _make_kg(tmp_path, update_record(),
+                      list(eval_index().values()), stats(), nodes)
+    cost_log = tmp_path / "_cost_log.jsonl"   # absent on purpose
+    out_path = generate(kg, rr, str(cost_log), do_log=False)
+    assert out_path.endswith("digests/2026-06-24T080012Z-v7.md")
+    digest_text = open(out_path, encoding="utf-8").read()
+    pointer_text = open(os.path.join(kg, "_digest.md"), encoding="utf-8").read()
+    assert digest_text == pointer_text                  # latest pointer is a copy
+    assert "Effect size was 0.4 (p<0.01)." in digest_text
+    assert "Cost: unavailable" in digest_text           # no cost log file
+
+
+def test_load_cost_statuses(tmp_path):
+    from render_digest import load_cost
+    missing = tmp_path / "nope.jsonl"
+    assert load_cost(str(missing), "abc")["status"] == "unavailable"
+    log = tmp_path / "_cost_log.jsonl"
+    log.write_text(json.dumps({"session_id": "abc", "est_cost_usd": 0.5,
+                               "models": {"m": {"input": 1, "output": 2}}}) + "\n", encoding="utf-8")
+    assert load_cost(str(log), "abc")["status"] == "ok"
+    assert load_cost(str(log), "other")["status"] == "pending"     # file present, no match
+    assert load_cost(str(log), None)["status"] == "pending"        # no session id
+
+
+def test_generate_survives_logging_failure(tmp_path, monkeypatch):
+    import render_digest
+    from render_digest import generate
+    nodes = [{"id": "node_016", "title": "New concept"}, {"id": "node_003", "title": "Existing concept"}]
+    kg, rr = _make_kg(tmp_path, update_record(), list(eval_index().values()), stats(), nodes)
+    def boom(*a, **k):
+        raise PermissionError("read-only fs")
+    monkeypatch.setattr(render_digest, "append_entry", boom)
+    out_path = generate(kg, rr, str(tmp_path / "_cost_log.jsonl"), do_log=True)  # must not raise
+    assert os.path.exists(out_path)
+    assert os.path.exists(os.path.join(kg, "_digest.md"))

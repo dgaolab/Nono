@@ -147,3 +147,109 @@ def render(run_record: dict, eval_index: dict, node_titles: dict,
     lines.extend(_failures(run_record, eval_index, node_titles))
     lines.extend(_totals(stats, cost))
     return "\n".join(lines)
+
+
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from append_log import append_entry
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_COST_LOG = os.path.join(REPO_ROOT, "_cost_log.jsonl")
+
+
+def load_cost(log_path: str, session_id) -> dict:
+    """Return a cost dict: ok (with totals) / pending / unavailable."""
+    if not os.path.exists(log_path):
+        return {"status": "unavailable"}
+    if not session_id:
+        return {"status": "pending", "session_id": session_id}
+    found = None
+    with open(log_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("session_id") == session_id:
+                found = entry          # last match wins
+    if found is None:
+        return {"status": "pending", "session_id": session_id}
+    return {"status": "ok", "est_cost_usd": found.get("est_cost_usd", 0.0),
+            "models": found.get("models", {})}
+
+
+def generate(kg_folder: str, run_record_path: str,
+             cost_log_path: str = DEFAULT_COST_LOG, do_log: bool = True) -> str:
+    """Render the digest for a run-record and write digests/<run_id>.md + _digest.md.
+    Returns the path to the per-run digest file."""
+    with open(run_record_path, "r", encoding="utf-8") as fh:
+        run_record = json.load(fh)
+
+    eval_log = []
+    eval_path = os.path.join(kg_folder, "_evaluation_log.json")
+    if os.path.exists(eval_path):
+        try:
+            with open(eval_path, "r", encoding="utf-8") as fh:
+                eval_log = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            eval_log = []
+    eval_index = {e["node_id"]: e for e in eval_log if isinstance(e, dict) and "node_id" in e}
+
+    node_titles, stats = {}, {}
+    manifest_path = os.path.join(kg_folder, "manifest.json")
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as fh:
+                manifest = json.load(fh)
+            node_titles = {n["id"]: n.get("title", n["id"])
+                           for n in manifest.get("nodes", []) if "id" in n}
+            stats = manifest.get("statistics", {})
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    cost = load_cost(cost_log_path, run_record.get("cost_session_id"))
+
+    digest_md = render(run_record, eval_index, node_titles, stats, cost)
+
+    digests_dir = os.path.join(kg_folder, "digests")
+    os.makedirs(digests_dir, exist_ok=True)
+    digest_path = os.path.join(digests_dir, run_record["run_id"] + ".md")
+    with open(digest_path, "w", encoding="utf-8") as fh:
+        fh.write(digest_md)
+    with open(os.path.join(kg_folder, "_digest.md"), "w", encoding="utf-8") as fh:
+        fh.write(digest_md)
+
+    if do_log:
+        try:
+            append_entry(kg_folder, "digest",
+                         f"Digest written for {run_record['run_id']} (mode {run_record.get('mode')}).")
+        except Exception:
+            pass        # never fail the run over logging
+
+    return digest_path
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Render a KG run digest.")
+    parser.add_argument("kg_folder", help="Path to the KG folder")
+    parser.add_argument("--run-record", required=True, help="Path to runs/<run_id>.json")
+    parser.add_argument("--cost-log", default=DEFAULT_COST_LOG, help="Path to _cost_log.jsonl")
+    parser.add_argument("--no-log", action="store_true", help="Do not append a digest entry to _log.md")
+    args = parser.parse_args()
+    try:
+        path = generate(args.kg_folder, args.run_record, args.cost_log, do_log=not args.no_log)
+    except Exception as e:          # digest must never fail the run
+        print(f"Warning: digest generation failed: {e}", file=sys.stderr)
+        sys.exit(0)
+    print(f"Digest written: {path}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
