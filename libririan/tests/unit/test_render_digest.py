@@ -157,3 +157,16 @@ def test_generate_survives_logging_failure(tmp_path, monkeypatch):
     out_path = generate(kg, rr, str(tmp_path / "_cost_log.jsonl"), do_log=True)  # must not raise
     assert os.path.exists(out_path)
     assert os.path.exists(os.path.join(kg, "_digest.md"))
+
+
+def test_retractions_section_renders_when_present():
+    rec = update_record()
+    rec["retractions"] = [{"pmid": "99999", "nodes": ["node_003"], "action": "quarantined"}]
+    out = render(rec, eval_index(), titles(), stats(), {"status": "unavailable"})
+    assert "Retractions" in out
+    assert "99999" in out and "node_003" in out and "quarantined" in out
+
+
+def test_no_retractions_section_when_absent():
+    out = render(update_record(), eval_index(), titles(), stats(), {"status": "unavailable"})
+    assert "## Retractions" not in out

@@ -73,3 +73,19 @@ def test_missing_required_field_rejected():
         assert False, "expected ValidationError"
     except jsonschema.ValidationError:
         pass
+
+
+def test_retractions_array_is_valid():
+    rec = valid_update_record()
+    rec["retractions"] = [{"pmid": "111", "nodes": ["node_003"], "action": "quarantined"}]
+    jsonschema.validate(rec, load_schema())
+
+
+def test_retractions_bad_action_rejected():
+    rec = valid_update_record()
+    rec["retractions"] = [{"pmid": "111", "nodes": ["node_003"], "action": "deleted"}]
+    try:
+        jsonschema.validate(rec, load_schema())
+        assert False, "expected ValidationError"
+    except jsonschema.ValidationError:
+        pass
