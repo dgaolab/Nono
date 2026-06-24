@@ -106,6 +106,18 @@ def _failures(rr: dict, eval_index: dict, node_titles: dict) -> list[str]:
     return lines
 
 
+def _retractions(rr: dict) -> list[str]:
+    items = rr.get("retractions") or []
+    if not items:
+        return []
+    lines = ["## Retractions"]
+    for r in items:
+        nodes = ", ".join(r.get("nodes", []))
+        lines.append(f"- PMID {r.get('pmid')} — {r.get('action')} — affects {nodes}")
+    lines.append("")
+    return lines
+
+
 def render(run_record: dict, eval_index: dict, node_titles: dict,
            stats: dict, cost: dict) -> str:
     """Render the digest markdown. Pure function of its inputs."""
@@ -130,6 +142,7 @@ def render(run_record: dict, eval_index: dict, node_titles: dict,
             f"{nid} ({node_titles.get(nid, nid)})" for nid in run_record.get("nodes_created", [])))
         lines.append("")
         lines.extend(_failures(run_record, eval_index, node_titles))
+        lines.extend(_retractions(run_record))
         lines.extend(_totals(stats, cost))
         return "\n".join(lines)
 
@@ -145,6 +158,7 @@ def render(run_record: dict, eval_index: dict, node_titles: dict,
         lines.extend(_node_block(nid, node_titles.get(nid, nid),
                                  _refs_added_for(nid, run_record), eval_index))
     lines.extend(_failures(run_record, eval_index, node_titles))
+    lines.extend(_retractions(run_record))
     lines.extend(_totals(stats, cost))
     return "\n".join(lines)
 

@@ -53,6 +53,18 @@
         "failed": {"type": "integer", "minimum": 0}
       }
     },
-    "cost_session_id": {"type": ["string", "null"]}
+    "cost_session_id": {"type": ["string", "null"]},
+    "retractions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pmid", "nodes", "action"],
+        "properties": {
+          "pmid": {"type": "string"},
+          "nodes": {"type": "array", "items": {"type": "string"}},
+          "action": {"type": "string", "enum": ["flagged", "quarantined"]}
+        }
+      }
+    }
   }
 }

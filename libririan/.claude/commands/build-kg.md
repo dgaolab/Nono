@@ -581,6 +581,7 @@ In BUILD mode, do not generate a changelog.
    - `refs_added`: `[{pmid, nodes:[...]}]`; `refs_failed`: `[{pmid, node, reason}]`.
    - `eval_summary`: `{evaluated, passed, failed}` from Phase 3.
    - `cost_session_id`: this session's id if known, else `null`.
+   - `retractions`: the `retractions` array from the scheduled run's retraction sweep (Step 0 of the scheduled prompt), or omit/`[]` for a manual run with no sweep.
 
    Then render the digest:
    ```
