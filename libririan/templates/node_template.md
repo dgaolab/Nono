@@ -8,6 +8,10 @@ pubmed_ids:
     supports: "Specific claim this PMID backs"
     verified: true
     evidence_tier: "unclassified"
+    # quotes added by the evaluator for verified refs — 1-3 verbatim excerpts:
+    # quotes:
+    #   - text: "Verbatim sentence from the source that backs the claim."
+    #     source: "abstract"   # abstract | full_text
 external_ids:
   # - source: "clinicaltrials"
   #   id: "NCT04000000"
