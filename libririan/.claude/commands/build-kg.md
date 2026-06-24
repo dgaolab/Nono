@@ -550,6 +550,8 @@ In BUILD mode, do not generate a changelog.
    - `_pmid_ledger.json` — PMID provenance ledger
    - `_log.md` — operation log (append-only)
    - `_changelog.md` — update history (UPDATE mode only)
+   - `runs/<run_id>.json` — structured run-record (one per run)
+   - `digests/<run_id>.md` + `_digest.md` — audit-readable run digest (latest pointer)
    - `nodes/*.md` — all node files
 
 1b. Validate the manifest against the schema:
@@ -568,6 +570,21 @@ In BUILD mode, do not generate a changelog.
    ```
    python3 scripts/update_manifest_stats.py {KG_FOLDER} --stamp-last-run
    ```
+
+1e. Write the run-record and render the digest. Build `runs/<run_id>.json` where `run_id` is `<UTC-timestamp-with-colons-removed>Z-v<version>` (e.g. `2026-06-24T080012Z-v7`), conforming to `schemas/run_record_schema.json`. Populate it from this run's changelog buffer (Phase 2):
+   - `mode`: `"build"` for an initial build, `"update"` otherwise.
+   - `since_date`: the UPDATE window start, or `null` for an initial build.
+   - `preflight`: `{novel_count, threshold}` if this run came from a scheduled preflight, else `null`.
+   - `nodes_created`, `nodes_revised`: node IDs touched this run.
+   - `refs_added`: `[{pmid, nodes:[...]}]`; `refs_failed`: `[{pmid, node, reason}]`.
+   - `eval_summary`: `{evaluated, passed, failed}` from Phase 3.
+   - `cost_session_id`: this session's id if known, else `null`.
+
+   Then render the digest:
+   ```
+   python3 scripts/render_digest.py {KG_FOLDER} --run-record {KG_FOLDER}/runs/{run_id}.json
+   ```
+   This writes `digests/{run_id}.md` and refreshes `_digest.md`. Digest generation never fails the run — if it warns, continue.
 
 2. Log the operation. **This step is mandatory — do not skip it even if prior validation steps had warnings.**
    First, get the ledger statistics:
