@@ -127,7 +127,14 @@ Evaluate:
 
 Assign a verdict per PMID: `supported`, `partially_supported`, `not_supported`, `unrelated`.
 
-For each PMID you rate `supported` or `partially_supported`, capture **1-3 verbatim excerpts** (each ≤ ~2 sentences) from the article text you just read — the exact sentence(s) your verdict rests on. Record each excerpt with its source section: `abstract` or `full_text`. Copy text verbatim (no paraphrasing). You already have the article text in context, so this requires no additional fetch. Do **not** capture quotes for `not_supported` or `unrelated` references.
+For each PMID you rate `supported` or `partially_supported`, capture the supporting quotes that justify the verdict. Follow each of these rules:
+
+- **Count:** capture **1-3 excerpts** — the exact sentence(s) your verdict rests on.
+- **Length:** each excerpt is **≤ ~2 sentences**.
+- **Verbatim:** copy the text exactly from the article you just read — **no paraphrasing**.
+- **Source tag:** record each excerpt's source section as either `abstract` or `full_text`.
+- **No extra fetch:** you already have the article text in context, so this requires no additional tool call.
+- **Exclusion:** do **not** capture quotes for `not_supported` or `unrelated` references.
 
 For NCT and ChEMBL references, apply the same logic: does the trial/compound data actually support the node's claim?
 
@@ -182,6 +189,16 @@ Build the evaluation entries array:
         "reasoning": "The abstract states X, which directly supports the node's claim about X.",
         "quotes": [
           {"text": "At 12 weeks, 40.2% of patients achieved a response versus 11.1% with placebo.", "source": "abstract"}
+        ]
+      },
+      {
+        "pmid": "31000001",
+        "exists": true,
+        "article_title": "...",
+        "verdict": "partially_supported",
+        "reasoning": "The full text supports the direction of the effect but in a smaller subgroup than the node claims.",
+        "quotes": [
+          {"text": "A benefit was observed in the pre-specified high-risk subgroup, though the overall cohort did not reach significance.", "source": "full_text"}
         ]
       }
     ],
