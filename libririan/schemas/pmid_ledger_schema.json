@@ -38,8 +38,8 @@
           },
           "disposition": {
             "type": "string",
-            "enum": ["used", "irrelevant", "failed", "superseded"],
-            "description": "Current status: used (assigned to node), irrelevant (retrieved but not used), failed (evaluation failed), superseded (replaced during remediation)"
+            "enum": ["used", "irrelevant", "failed", "superseded", "retracted"],
+            "description": "Current status: used (assigned to node), irrelevant (retrieved but not used), failed (evaluation failed), superseded (replaced during remediation), retracted (cited article retracted by publisher)"
           },
           "first_seen": {
             "type": "string",

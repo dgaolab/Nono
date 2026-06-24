@@ -33,14 +33,15 @@ from lib.frontmatter import parse as parse_node
 # ---------------------------------------------------------------------------
 
 LEDGER_FILENAME = "_pmid_ledger.json"
-DISPOSITIONS = {"used", "irrelevant", "failed", "superseded"}
+DISPOSITIONS = {"used", "irrelevant", "failed", "superseded", "retracted"}
 
 # Valid disposition transitions.  Key = current, value = set of allowed targets.
 _VALID_TRANSITIONS: dict[str, set[str]] = {
-    "used": {"failed", "superseded"},
+    "used": {"failed", "superseded", "retracted"},
     "irrelevant": {"used"},
     "failed": {"used"},        # re-found and re-verified in a later cycle
     "superseded": {"used"},    # re-assigned in a later cycle
+    "retracted": {"used"},     # re-validated in a later cycle (recovery)
 }
 
 
