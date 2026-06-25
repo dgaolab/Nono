@@ -127,11 +127,7 @@ Claude `/evaluate-kg` command, which remains the higher-quality default.
 
 ### Build / ingest a KG — Claude-free now (uses the local model)
 
-`scripts/librarian_build.py` constructs (BUILD) or extends (UPDATE) a KG using
-the local model (`lib/llm.py`) + E-utilities (`lib/pubmed.py`), then runs the
-full deterministic finish (ledger, evidence tiers, literature stamping,
-evaluation, quarantine, index, validation, embeddings, log). It auto-detects
-UPDATE when the target folder already has a manifest.
+`scripts/librarian_build.py` constructs (BUILD) or extends (UPDATE) a KG using the local model (`lib/llm.py`) + E-utilities (`lib/pubmed.py`). It auto-detects UPDATE when the target folder already has a manifest. In BUILD mode it then runs the full deterministic finish (ledger, evidence tiers, literature stamping, evaluation, quarantine, index, validation, embeddings, log). UPDATE mode currently appends and evaluates new nodes; wiring the remaining deterministic finish steps into UPDATE is a tracked follow-up.
 
 ```bash
 conda run -n nono python scripts/librarian_build.py "<topic>" \
