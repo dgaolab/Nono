@@ -37,3 +37,9 @@ def test_plan_search_raises_on_unparseable():
     chat = _chat_returning("I cannot help")
     with pytest.raises(build.BuildError):
         build.plan_search("t", chat=chat)
+
+
+def test_select_candidates_dedups_excludes_and_caps():
+    out = build.select_candidates(
+        [["1", "2", "3"], ["2", "4", "5"]], known_pmids={"3"}, cap=3)
+    assert out == ["1", "2", "4"]

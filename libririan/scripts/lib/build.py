@@ -58,3 +58,18 @@ def plan_search(topic, *, chat, breadth_override=None):
     if not subs:
         raise BuildError("no sub-queries produced")
     return {"breadth": breadth, "sub_queries": subs}
+
+
+def select_candidates(per_query_pmids, known_pmids, cap):
+    """Flatten per-query PMID lists → deduped, ledger-excluded, capped order."""
+    seen = set()
+    out = []
+    for pmids in per_query_pmids:
+        for p in pmids:
+            if p in seen or p in known_pmids:
+                continue
+            seen.add(p)
+            out.append(p)
+            if len(out) >= cap:
+                return out
+    return out
