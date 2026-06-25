@@ -73,3 +73,36 @@ def select_candidates(per_query_pmids, known_pmids, cap):
             if len(out) >= cap:
                 return out
     return out
+
+
+def _articles_blob(articles):
+    return "\n\n".join(
+        f"PMID {a['pmid']}: {a['title']}\n{a.get('abstract', '')}" for a in articles)
+
+
+_SKELETON_SYS = (
+    "You design a biomedical knowledge graph from article abstracts. Propose "
+    "coherent knowledge nodes, each ONE citable claim/concept. Reply with ONE "
+    "JSON object: {\"nodes\": [{\"title\": \"...\", \"summary\": \"one sentence\", "
+    "\"pmids\": [\"<pmid>\", ...]}]}. Use ONLY PMIDs from the provided articles. "
+    "Each node cites the PMIDs whose abstracts support it."
+)
+
+
+def propose_skeleton(topic, articles, *, chat, nodes_min, nodes_max):
+    """Propose node skeletons, keeping only real PMIDs and non-empty nodes."""
+    allowed = {a["pmid"] for a in articles}
+    user = (f"TOPIC: {topic}\nPropose {nodes_min}-{nodes_max} nodes.\n\n"
+            f"ARTICLES:\n{_articles_blob(articles)}")
+    obj = _ask_json(chat, [{"role": "system", "content": _SKELETON_SYS},
+                           {"role": "user", "content": user}])
+    out = []
+    for n in obj.get("nodes", []) or []:
+        title = str(n.get("title", "")).strip()
+        summary = str(n.get("summary", "")).strip()
+        pmids = [p for p in (n.get("pmids") or []) if p in allowed]
+        if title and summary and pmids:
+            out.append({"title": title, "summary": summary, "pmids": pmids})
+    if not out:
+        raise BuildError("skeleton produced no usable nodes")
+    return out

@@ -43,3 +43,26 @@ def test_select_candidates_dedups_excludes_and_caps():
     out = build.select_candidates(
         [["1", "2", "3"], ["2", "4", "5"]], known_pmids={"3"}, cap=3)
     assert out == ["1", "2", "4"]
+
+
+_ARTS = [
+    {"pmid": "1", "title": "Melatonin and clock genes", "abstract": "Melatonin entrains the SCN."},
+    {"pmid": "2", "title": "Melatonin for sleep", "abstract": "Melatonin reduces sleep latency."},
+]
+
+
+def test_propose_skeleton_filters_hallucinated_pmids_and_empty_nodes():
+    reply = (
+        '{"nodes": ['
+        '{"title": "SCN entrainment", "summary": "Melatonin entrains the clock.", "pmids": ["1", "999"]},'
+        '{"title": "Sleep latency", "summary": "Melatonin shortens sleep latency.", "pmids": ["2"]},'
+        '{"title": "Ghost", "summary": "Nothing real.", "pmids": ["999"]}'
+        ']}'
+    )
+    def chat(messages, **kw):
+        return reply
+    out = build.propose_skeleton("melatonin", _ARTS, chat=chat, nodes_min=1, nodes_max=10)
+    assert len(out) == 2
+    assert out[0]["pmids"] == ["1"]          # 999 dropped
+    assert out[1]["pmids"] == ["2"]
+    assert all(n["title"] and n["summary"] for n in out)
