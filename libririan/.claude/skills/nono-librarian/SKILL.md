@@ -105,6 +105,25 @@ no MCP). Run any with `--help` first to confirm flags before using.
 | Render run digest | `scripts/render_digest.py` |
 | Cross-KG indices | `scripts/build_cross_indices.py`, `scripts/generate_index.py` |
 
+### Evaluate / fact-check a KG — Claude-free now (uses the local model)
+
+`scripts/librarian_evaluate.py` re-verifies each node's claims against PubMed
+(via `lib/pubmed.py`) and the local model (via `lib/llm.py`), then writes
+`_evaluation_log.json` and updates node frontmatter + manifest stats. Every
+supporting verdict must rest on a **verbatim quote** found in the source, or it
+is forced down to `not_supported` (the deterministic guardrail in
+`lib/evaluate.py`). If the model endpoint is unavailable the run aborts and
+writes **nothing** — it never half-evaluates.
+
+```bash
+conda run -n nono python scripts/librarian_evaluate.py <KG> [--nodes id1,id2]
+```
+
+Quality of the claim↔evidence judgment tracks the local model; the guardrail
+bounds the failure mode (it cannot pass a claim it cannot quote) but a weak
+model may still be over-skeptical. This is the local counterpart to the
+Claude `/evaluate-kg` command, which remains the higher-quality default.
+
 ### Build / ingest a new KG — NOT yet Claude-free
 
 KG construction currently lives in the Claude agent prompt `.claude/commands/
@@ -120,7 +139,8 @@ the Claude-based `/build-kg` only if they explicitly accept using Claude.
 ## Scope (be honest about the boundary)
 
 - **Works locally with zero Claude today:** env bootstrap, query/search,
-  natural-language answers (when a local endpoint is up), and all maintenance
+  natural-language answers (when a local endpoint is up), evidence
+  evaluation/fact-checking (when a local endpoint is up), and all maintenance
   scripts.
 - **Not yet local:** KG building/ingestion. Tracked as a separate
   re-architecture; this skill is Phase 0 (front door + seams).
