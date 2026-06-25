@@ -1,0 +1,9 @@
+Let's build an agent that can achieve such knowledge-base building.
+This must have the following components:
+1. Input: user defined topics. Optionally, users can provide 1. a folder containing material to read and 2. an output name. 
+2. Knowledge Sources: primarily from PubMed MCP, with ClinicalTrials.gov MCP and ChEMBL MCP activated based on topic classification. Optionally, a user-provided folder.
+4. Knowledge Structure: build a knowledge graph. Each node is a piece of knowlege. Each node MUST have an attribution of knowledge content and an attribution of reference, which contains a list of supporting research articles encoded by PubMed IDs. 
+5. Initiation: If user doesn't provide an output name, scan the current folder for a folder name like `KG_XXX`. Assess whether XXX belongs to the current topic. If yes, read in the knowledge graph in `KG_XXX` and get ready to update it. Otherwise, create `KG_XXX` folder, where XXX is your summarized topic. If user does provide an output name, check whether there is a folder of the same name in the current directory. If yes, read in the knowledge graph in `${output name}` and get ready to update it. Otherwise, create that folder using the output name.  
+6. Update Knowledge if you read in a previous graph. Otherwise, build from scratch. When build from scratch, read and understand all sources and determine the granularity of knowledge nodes. 
+7. Evaluation: for each newly added knowledge node, assess 1. the existence of PubMed IDs associated with it and 2. whether the content of each PubMed ID really supports the knowledge content. The evaluation MUST be done via an independent agent using PubMed MCP.
+8. Output: write the updated knowledge graph into the target folder. 
