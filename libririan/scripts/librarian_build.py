@@ -268,6 +268,19 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
             "failed": failed, "changelog": changelog, "kg_folder": kg_folder}
 
 
+def resolve_mode(kg_folder, topic):
+    return "update" if os.path.exists(os.path.join(kg_folder, "manifest.json")) else "build"
+
+
+def derive_since(manifest, override):
+    if override:
+        return override.replace("-", "/")
+    last = (manifest.get("schedule") or {}).get("last_run")
+    if last:
+        return last[:10].replace("-", "/")
+    return (manifest.get("updated") or "").replace("-", "/")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Claude-free KG build orchestrator")
     parser.add_argument("topic")
@@ -279,19 +292,31 @@ def main(argv=None):
 
     kg_name = args.output or "KG_" + build.slugify(args.topic)
     kg_folder = kg_name
+    mode = resolve_mode(kg_folder, args.topic)
     try:
-        summary = run_build(
-            args.topic, kg_folder, kg_name, esearch=pubmed.esearch,
-            fetch_metadata=pubmed.fetch_metadata, fetch_full_text=pubmed.fetch_full_text,
-            chat=llm.chat, breadth_override=args.breadth, today=_now_date())
+        if mode == "build":
+            summary = run_build(
+                args.topic, kg_folder, kg_name, esearch=pubmed.esearch,
+                fetch_metadata=pubmed.fetch_metadata, fetch_full_text=pubmed.fetch_full_text,
+                chat=llm.chat, breadth_override=args.breadth, today=_now_date())
+            print(f"BUILD complete: {summary['nodes']} nodes "
+                  f"({summary['passed']} passed, {summary['failed']} failed) → {kg_folder}")
+        else:
+            with open(os.path.join(kg_folder, "manifest.json"), encoding="utf-8") as fh:
+                manifest = json.load(fh)
+            since = derive_since(manifest, args.since)
+            summary = run_update(
+                args.topic, kg_folder, esearch=pubmed.esearch,
+                fetch_metadata=pubmed.fetch_metadata, fetch_full_text=pubmed.fetch_full_text,
+                chat=llm.chat, since_date=since, today=_now_date())
+            print(f"UPDATE complete: {len(summary['nodes_created'])} new nodes "
+                  f"({summary['passed']} passed, {summary['failed']} failed) → {kg_folder}")
     except llm.LLMUnavailable as e:
-        print(f"Error: local model unavailable — aborted; any partial output can be completed by re-running: {e}", file=sys.stderr)
+        print(f"Error: local model unavailable — nothing written: {e}", file=sys.stderr)
         return 2
     except build.BuildError as e:
         print(f"Error: build failed — {e}", file=sys.stderr)
         return 1
-    print(f"BUILD complete: {summary['nodes']} nodes "
-          f"({summary['passed']} passed, {summary['failed']} failed) → {summary['kg_folder']}")
     return 0
 
 

@@ -116,6 +116,20 @@ def test_run_update_appends_new_nodes(tmp_path):
     assert summary["nodes_created"] == ["node_002"]
 
 
+def test_resolve_mode(tmp_path):
+    kg = tmp_path / "KG_X"
+    assert lb.resolve_mode(str(kg), "t") == "build"
+    (kg).mkdir(); (kg / "manifest.json").write_text("{}")
+    assert lb.resolve_mode(str(kg), "t") == "update"
+
+
+def test_derive_since_prefers_override():
+    assert lb.derive_since({"updated": "2026-01-01"}, "2026-03-01") == "2026/03/01"
+    assert lb.derive_since({"updated": "2026-01-01"}, None) == "2026/01/01"
+    assert lb.derive_since({"schedule": {"last_run": "2026-05-05T00:00:00Z"},
+                            "updated": "2026-01-01"}, None) == "2026/05/05"
+
+
 def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
     kg = tmp_path / "KG_Mel"
     def esearch(q, retmax=10, **kw):
