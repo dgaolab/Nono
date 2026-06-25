@@ -237,3 +237,44 @@ def propose_relationships(nodes, *, chat):
     except BuildError:
         pass
     return _shared_pmid_edges(nodes)
+
+
+def apply_relationships(nodes, edges):
+    by_id = {n["id"]: n for n in nodes}
+    for e in edges:
+        s, t, r = e["source"], e["target"], e["relationship"]
+        for a, b in ((s, t), (t, s)):
+            node = by_id.get(a)
+            if node is None:
+                continue
+            if b not in node["related_nodes"]:
+                node["related_nodes"].append(b)
+        by_id[s]["relationships"][t] = r
+    for n in nodes:
+        n["related_nodes"] = sorted(set(n["related_nodes"]))
+
+
+def assemble_manifest(kg_name, topic, breadth, sub_queries, nodes, edges, today):
+    return {
+        "kg_name": kg_name,
+        "topic": topic,
+        "version": 1,
+        "created": today,
+        "updated": today,
+        "data_sources": ["pubmed"],
+        "search_profile": {"breadth": breadth, "sub_queries": sub_queries, "updated": today},
+        "nodes": [
+            {
+                "id": n["id"], "title": n["title"], "file": n["file"],
+                "tags": n.get("tags") or ["general"], "summary": n["summary"],
+                "keywords": n.get("keywords", []),
+                "pubmed_ids": list(n.get("supports", {}).keys()),
+                "evaluation_status": "pending",
+                "evidence_tier": n.get("evidence_tier", "unclassified"),
+                "entities": n.get("entities", []),
+            }
+            for n in nodes
+        ],
+        "edges": edges,
+        "statistics": {},
+    }

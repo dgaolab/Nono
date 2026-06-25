@@ -141,3 +141,25 @@ def test_propose_relationships_falls_back_to_shared_pmids():
     # node_001 & node_002 share PMID 2 → a related_to edge; node_003 shares none
     assert any({e["source"], e["target"]} == {"node_001", "node_002"} for e in out)
     assert all("node_003" not in (e["source"], e["target"]) for e in out)
+
+
+def test_apply_relationships_populates_node_links():
+    nodes = [{"id": "node_001", "related_nodes": [], "relationships": {}},
+             {"id": "node_002", "related_nodes": [], "relationships": {}}]
+    edges = [{"source": "node_001", "target": "node_002", "relationship": "supports"}]
+    build.apply_relationships(nodes, edges)
+    assert "node_002" in nodes[0]["related_nodes"]
+    assert nodes[0]["relationships"]["node_002"] == "supports"
+
+
+def test_assemble_manifest_minimal_shape():
+    nodes = [{"id": "node_001", "title": "T", "file": "node_001_t.md", "tags": ["c"],
+              "summary": "s", "keywords": ["k"], "supports": {"2": "x"},
+              "entities": [], "evidence_tier": "unclassified"}]
+    m = build.assemble_manifest("KG_X", "topic", "narrow", ["q1"], nodes, [], "2026-06-24")
+    assert m["kg_name"] == "KG_X"
+    assert m["data_sources"] == ["pubmed"]
+    assert m["search_profile"]["sub_queries"] == ["q1"]
+    n = m["nodes"][0]
+    assert n["pubmed_ids"] == ["2"]            # manifest stores PMIDs as strings
+    assert n["evaluation_status"] == "pending"
