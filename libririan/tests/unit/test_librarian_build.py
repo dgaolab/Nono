@@ -130,6 +130,26 @@ def test_derive_since_prefers_override():
                             "updated": "2026-01-01"}, None) == "2026/05/05"
 
 
+def test_source_report_lists_counts():
+    arts = [{"pmid": "1", "title": "T1", "abstract": "a"}]
+    rep = lb.source_report("melatonin", "build", "narrow", ["q1"], arts)
+    assert "melatonin" in rep and "narrow" in rep and "PMIDs" in rep
+
+
+def test_apply_steer_narrow_drops_matching():
+    arts = [{"pmid": "1", "title": "melatonin sleep", "abstract": "a"},
+            {"pmid": "2", "title": "cancer trial", "abstract": "b"}]
+    kept, subs, proceed = lb.apply_steer("narrow:cancer", arts, ["q1"])
+    assert [a["pmid"] for a in kept] == ["1"]
+    assert proceed is True
+
+
+def test_apply_steer_empty_proceeds_unchanged():
+    arts = [{"pmid": "1", "title": "t", "abstract": "a"}]
+    kept, subs, proceed = lb.apply_steer("", arts, ["q1"])
+    assert kept == arts and proceed is True
+
+
 def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
     kg = tmp_path / "KG_Mel"
     def esearch(q, retmax=10, **kw):

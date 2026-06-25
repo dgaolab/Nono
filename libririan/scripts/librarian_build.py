@@ -24,6 +24,32 @@ from lib import build, llm, pubmed
 from lib.frontmatter import parse as parse_node, write as write_node
 
 
+def source_report(topic, mode, breadth, sub_queries, articles):
+    lines = [
+        "=== Source Gathering Complete — Awaiting Review ===",
+        f"Topic: {topic}", f"Mode: {mode}", f"Breadth tier: {breadth}",
+        f"Sub-queries: {', '.join(sub_queries)}",
+        f"PMIDs retrieved: {len(articles)}",
+        "",
+        "Top articles:",
+    ]
+    for a in articles[:5]:
+        lines.append(f"  PMID {a['pmid']} — {a['title']}")
+    lines.append("")
+    lines.append("Steer: <enter>=proceed | narrow:<term>=drop matching articles")
+    return "\n".join(lines)
+
+
+def apply_steer(steer, articles, sub_queries):
+    s = (steer or "").strip()
+    if s.lower().startswith("narrow:"):
+        term = s.split(":", 1)[1].strip().lower()
+        kept = [a for a in articles
+                if term not in a["title"].lower() and term not in a.get("abstract", "").lower()]
+        return kept, sub_queries, True
+    return articles, sub_queries, True
+
+
 def construct_graph(topic, kg_name, articles, *, chat, breadth, sub_queries,
                     today, start_id=1):
     """Skeleton → per-node synthesis → ids → relationships → manifest."""
@@ -137,7 +163,7 @@ def _evaluate_and_writeback(kg_folder, nodes, today, *, fetch_metadata, fetch_fu
 
 
 def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_text,
-              chat, breadth_override, today, run_subprocess=True):
+              chat, breadth_override, today, run_subprocess=True, prompt_fn=None):
     os.makedirs(os.path.join(kg_folder, "nodes"), exist_ok=True)
     scripts_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -158,6 +184,9 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
     articles = gather_articles(
         sub_queries, esearch=esearch, fetch_metadata=fetch_metadata,
         fetch_full_text=fetch_full_text, known_pmids=known, tier=tier)
+    if prompt_fn is not None:
+        print(source_report(topic, "build", breadth, sub_queries, articles))
+        articles, sub_queries, _ = apply_steer(prompt_fn(), articles, sub_queries)
     if not articles:
         raise build.BuildError("no articles retrieved for topic")
 
@@ -208,7 +237,7 @@ def next_node_number(manifest):
 
 
 def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, chat,
-               since_date, today, run_subprocess=True):
+               since_date, today, run_subprocess=True, prompt_fn=None):
     """Load an existing KG manifest, gather new articles, append new nodes/edges.
 
     Never deletes or rewrites existing nodes. Returns a summary dict with
@@ -238,9 +267,13 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
     else:
         known = {p for n in manifest["nodes"] for p in n.get("pubmed_ids", [])}
 
-    articles = gather_articles(recent_qs + gap_qs, esearch=esearch,
+    sub_queries = recent_qs + gap_qs
+    articles = gather_articles(sub_queries, esearch=esearch,
                                fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text,
                                known_pmids=known, tier=tier)
+    if prompt_fn is not None:
+        print(source_report(topic, "update", breadth, sub_queries, articles))
+        articles, sub_queries, _ = apply_steer(prompt_fn(), articles, sub_queries)
     if not articles:
         return {"nodes_created": [], "passed": 0, "failed": 0, "changelog": [], "kg_folder": kg_folder}
 
@@ -293,12 +326,14 @@ def main(argv=None):
     kg_name = args.output or "KG_" + build.slugify(args.topic)
     kg_folder = kg_name
     mode = resolve_mode(kg_folder, args.topic)
+    prompt_fn = (lambda: input("> ")) if args.interactive else None
     try:
         if mode == "build":
             summary = run_build(
                 args.topic, kg_folder, kg_name, esearch=pubmed.esearch,
                 fetch_metadata=pubmed.fetch_metadata, fetch_full_text=pubmed.fetch_full_text,
-                chat=llm.chat, breadth_override=args.breadth, today=_now_date())
+                chat=llm.chat, breadth_override=args.breadth, today=_now_date(),
+                prompt_fn=prompt_fn)
             print(f"BUILD complete: {summary['nodes']} nodes "
                   f"({summary['passed']} passed, {summary['failed']} failed) → {kg_folder}")
         else:
@@ -308,7 +343,8 @@ def main(argv=None):
             summary = run_update(
                 args.topic, kg_folder, esearch=pubmed.esearch,
                 fetch_metadata=pubmed.fetch_metadata, fetch_full_text=pubmed.fetch_full_text,
-                chat=llm.chat, since_date=since, today=_now_date())
+                chat=llm.chat, since_date=since, today=_now_date(),
+                prompt_fn=prompt_fn)
             print(f"UPDATE complete: {len(summary['nodes_created'])} new nodes "
                   f"({summary['passed']} passed, {summary['failed']} failed) → {kg_folder}")
     except llm.LLMUnavailable as e:
