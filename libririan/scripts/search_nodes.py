@@ -25,6 +25,9 @@ import re
 import sys
 from collections import Counter, defaultdict
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lib import embeddings
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -62,9 +65,10 @@ TIER_BONUS = {
     "unclassified": 0.0,
 }
 
-W_KEYWORD = 0.35
-W_ENTITY = 0.30
-W_SUMMARY = 0.20
+W_KEYWORD = 0.30
+W_ENTITY = 0.25
+W_SEMANTIC = 0.25
+W_SUMMARY = 0.10
 W_TAG = 0.10
 EVAL_BONUS = 0.05
 
@@ -251,6 +255,31 @@ def score_tags(query_tokens: list[str], tags: list[str]) -> float:
     return 0.0
 
 
+def score_semantic(query_vec, node_vec):
+    """Clamped cosine similarity in [0, 1]; 0.0 if either vector is missing."""
+    if not query_vec or not node_vec:
+        return 0.0
+    return max(0.0, min(1.0, embeddings.cosine(query_vec, node_vec)))
+
+
+def load_embedding_index(kg_folder):
+    """Load a usable _embeddings.json for kg_folder, else None (warn on stale/malformed)."""
+    path = os.path.join(kg_folder, "_embeddings.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            idx = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        print(f"Warning: ignoring malformed embedding index {path}", file=sys.stderr)
+        return None
+    if idx.get("model") != embeddings.MODEL_NAME:
+        print(f"Warning: ignoring stale embedding index {path} "
+              f"(model {idx.get('model')!r} != {embeddings.MODEL_NAME!r})", file=sys.stderr)
+        return None
+    return idx
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -273,12 +302,17 @@ def main():
                         help="Include quarantined nodes in results (excluded by default)")
     parser.add_argument("--compact", action="store_true",
                         help="Omit score_breakdown, match details, and query_analysis")
+    parser.add_argument("--no-semantic", dest="no_semantic", action="store_true",
+                        help="Disable embedding-based semantic scoring (lexical only)")
+    parser.add_argument("--query-embedding-fixture", dest="query_embedding_fixture", default=None,
+                        help="JSON file with a precomputed query vector (list[float]); test seam")
     args = parser.parse_args()
 
     min_tier_rank = EVIDENCE_TIER_ORDER.get(args.evidence_min, -1) if args.evidence_min else -1
 
-    # Load all nodes from all manifests
-    all_nodes = []  # list of (kg_name, node_entry)
+    # Load all nodes from all manifests; track each node's KG folder + that folder's index
+    all_nodes = []   # list of (kg_name, node_entry, kg_folder)
+    indices = {}     # kg_folder -> embedding index dict or None
     for manifest_path in args.manifests:
         if not os.path.exists(manifest_path):
             print(f"Error: file not found: {manifest_path}", file=sys.stderr)
@@ -290,9 +324,12 @@ def main():
             print(f"Error: invalid JSON in {manifest_path}: {e}", file=sys.stderr)
             sys.exit(1)
 
-        kg_name = manifest.get("kg_name", os.path.basename(os.path.dirname(manifest_path)))
+        kg_folder = os.path.dirname(os.path.abspath(manifest_path))
+        kg_name = manifest.get("kg_name", os.path.basename(kg_folder))
+        if kg_folder not in indices:
+            indices[kg_folder] = None if args.no_semantic else load_embedding_index(kg_folder)
         for node in manifest.get("nodes", []):
-            all_nodes.append((kg_name, node))
+            all_nodes.append((kg_name, node, kg_folder))
 
     if not all_nodes:
         output = {"results": [], "summary": {"total_scanned": 0, "matched": 0}}
@@ -306,18 +343,18 @@ def main():
 
     # Pre-filter by evidence tier
     if min_tier_rank > 0:
-        all_nodes = [(kg, n) for kg, n in all_nodes
+        all_nodes = [(kg, n, f) for kg, n, f in all_nodes
                      if EVIDENCE_TIER_ORDER.get(n.get("evidence_tier", "unclassified"), 0) >= min_tier_rank]
 
     # Pre-filter quarantined nodes (default: exclude)
     if not args.include_quarantined:
-        all_nodes = [(kg, n) for kg, n in all_nodes
+        all_nodes = [(kg, n, f) for kg, n, f in all_nodes
                      if not n.get("quarantined", False)]
 
     # Pre-filter by tag
     if args.tag_filter:
         tag_lower = args.tag_filter.lower()
-        all_nodes = [(kg, n) for kg, n in all_nodes
+        all_nodes = [(kg, n, f) for kg, n, f in all_nodes
                      if any(tag_lower == t.lower() for t in n.get("tags", []))]
 
     # Tokenize query
@@ -325,14 +362,27 @@ def main():
     query_entities = extract_entities_from_query(args.query)
 
     # Build IDF from all summaries
-    all_summary_tokens = [tokenize(n.get("summary", "")) for _, n in all_nodes]
+    all_summary_tokens = [tokenize(n.get("summary", "")) for _, n, _ in all_nodes]
     idf = build_idf(all_summary_tokens)
+
+    # Query embedding for semantic scoring (computed once), if any usable index loaded.
+    query_vec = None
+    if not args.no_semantic and any(indices.values()):
+        if args.query_embedding_fixture:
+            with open(args.query_embedding_fixture, "r", encoding="utf-8") as fh:
+                query_vec = json.load(fh)
+        else:
+            try:
+                query_vec = embeddings.embed_texts([args.query])[0]
+            except embeddings.EmbeddingsUnavailable as e:
+                print(f"Warning: semantic scoring disabled ({e})", file=sys.stderr)
+                query_vec = None
 
     # Score each node
     results = []
     entity_ids_matched = set()
 
-    for idx, (kg_name, node) in enumerate(all_nodes):
+    for idx, (kg_name, node, kg_folder) in enumerate(all_nodes):
         node_id = node.get("id", "")
         keywords = node.get("keywords", [])
         entities = node.get("entities", [])
@@ -346,12 +396,22 @@ def main():
         sum_score = score_summary(query_tokens, all_summary_tokens[idx], idf)
         tag_s = score_tags(query_tokens, tags)
 
+        node_vec = None
+        if query_vec is not None:
+            idx_for_kg = indices.get(kg_folder)
+            if idx_for_kg:
+                node_entry = idx_for_kg.get("nodes", {}).get(node_id)
+                if node_entry:
+                    node_vec = node_entry.get("vector")
+        sem_score = score_semantic(query_vec, node_vec)
+
         eval_b = EVAL_BONUS if eval_status == "passed" else 0.0
         tier_b = TIER_BONUS.get(tier, 0.0)
         quarantine_penalty = -0.10 if node.get("quarantined", False) else 0.0
 
         final_score = (W_KEYWORD * kw_score +
                        W_ENTITY * ent_score +
+                       W_SEMANTIC * sem_score +
                        W_SUMMARY * sum_score +
                        W_TAG * tag_s +
                        eval_b + tier_b + quarantine_penalty)
@@ -371,6 +431,7 @@ def main():
             if not args.compact:
                 entry["score_breakdown"] = {
                     "keyword_score": round(kw_score, 4),
+                    "semantic_score": round(sem_score, 4),
                     "entity_score": round(ent_score, 4),
                     "summary_score": round(sum_score, 4),
                     "tag_score": round(tag_s, 4),

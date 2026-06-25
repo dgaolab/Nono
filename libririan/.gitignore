@@ -6,3 +6,4 @@ scripts/lib/__pycache__/
 __pycache__/
 *.pyc
 _cost_log.jsonl
+_embeddings.json

@@ -590,6 +590,12 @@ In BUILD mode, do not generate a changelog.
    ```
    This writes `digests/{run_id}.md` and refreshes `_digest.md`. Digest generation never fails the run — if it warns, continue.
 
+1f. Refresh the semantic embedding index (non-fatal). After the manifest is finalized, run:
+   ```
+   python3 scripts/build_embeddings.py {KG_FOLDER}
+   ```
+   This (re)builds the git-ignored `{KG_FOLDER}/_embeddings.json` cache used by semantic node search. It re-embeds only changed nodes. If `fastembed` is not installed or the model cannot load, this step exits non-zero — log it and continue; semantic search degrades to lexical until the index exists. Never fail the build over the embedding index.
+
 2. Log the operation. **This step is mandatory — do not skip it even if prior validation steps had warnings.**
    First, get the ledger statistics:
    ```
