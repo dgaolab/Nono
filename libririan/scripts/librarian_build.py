@@ -44,3 +44,48 @@ def construct_graph(topic, kg_name, articles, *, chat, breadth, sub_queries,
     manifest = build.assemble_manifest(
         kg_name, topic, breadth, sub_queries, nodes, edges, today)
     return nodes, manifest
+
+
+def gather_articles(sub_queries, *, esearch, fetch_metadata, fetch_full_text,
+                    known_pmids, tier):
+    per_query = [esearch(q, retmax=tier["max_results"]) for q in sub_queries]
+    pmids = build.select_candidates(per_query, known_pmids, cap=tier["metadata"])
+    meta_map = fetch_metadata(pmids) if pmids else {}
+    articles = []
+    for p in pmids:
+        meta = meta_map.get(p)
+        if not meta:
+            continue
+        articles.append({"pmid": p, "title": meta.get("title", ""),
+                         "abstract": meta.get("abstract", ""), "metadata": meta})
+    for a in articles[:tier["full_text"]]:
+        pmcid = a["metadata"].get("pmcid")
+        if not pmcid:
+            continue
+        try:
+            ft = fetch_full_text(pmcid)
+        except pubmed.PubMedUnavailable:
+            ft = ""
+        if ft:
+            a["abstract"] = (a["abstract"] + "\n\n" + ft).strip()
+    return articles
+
+
+def write_nodes(kg_folder, nodes, today):
+    nodes_dir = os.path.join(kg_folder, "nodes")
+    os.makedirs(nodes_dir, exist_ok=True)
+    for n in nodes:
+        fm, body = build.render_node_markdown(n, today)
+        write_node(os.path.join(nodes_dir, n["file"]), fm, body)
+
+
+def ledger_batch_for_used(articles):
+    batch = []
+    for a in articles:
+        m = a["metadata"]
+        batch.append({
+            "pmid": a["pmid"], "disposition": "used", "title": m.get("title"),
+            "authors": m.get("authors", []), "journal": m.get("journal"),
+            "year": m.get("year"), "publication_types": m.get("publication_types", []),
+        })
+    return batch
