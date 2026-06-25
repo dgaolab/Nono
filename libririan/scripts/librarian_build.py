@@ -142,7 +142,9 @@ def build_run_record(*, kg_name, mode, version, timestamp, nodes, passed, failed
     for n in nodes:
         for pmid in n.get("supports", {}):
             refs.setdefault(pmid, set()).add(n["id"])
-    refs_added = [{"pmid": p, "nodes": sorted(ns)} for p, ns in sorted(refs.items())]
+    # Sort PMIDs numerically (not lexicographically, so "10" follows "9").
+    refs_added = [{"pmid": p, "nodes": sorted(ns)}
+                  for p, ns in sorted(refs.items(), key=lambda kv: int(kv[0]))]
     return {
         "run_id": run_id, "kg_name": kg_name, "mode": mode, "timestamp": timestamp,
         "version": version, "since_date": since_date,
@@ -226,8 +228,9 @@ def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None,
          os.path.join(kg_folder, "manifest.json"))
     subprocess.run([sys.executable, os.path.join(scripts_dir, "build_embeddings.py"),
                     kg_folder], check=False)  # non-fatal
-    _run(os.path.join(scripts_dir, "append_log.py"), kg_folder,
-         "--op", op, "--summary", summary)
+    # Persist the run-record + digest BEFORE append_log: the run-record is the
+    # durable baseline for future updates, so it must survive a log-append
+    # failure rather than be lost behind a fatal step.
     if run_record is not None:
         runs_dir = os.path.join(kg_folder, "runs")
         os.makedirs(runs_dir, exist_ok=True)
@@ -237,6 +240,8 @@ def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None,
         # Digest is read-after-stats; never fails the run (matches build-kg 1e).
         subprocess.run([sys.executable, os.path.join(scripts_dir, "render_digest.py"),
                         kg_folder, "--run-record", rr_path], check=False)
+    _run(os.path.join(scripts_dir, "append_log.py"), kg_folder,
+         "--op", op, "--summary", summary)
 
 
 def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_text,

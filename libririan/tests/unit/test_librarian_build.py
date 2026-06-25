@@ -35,6 +35,14 @@ def test_build_run_record_shape_and_run_id():
     assert rr["refs_failed"] == []
 
 
+def test_build_run_record_orders_pmids_numerically():
+    nodes = [{"id": "node_001", "supports": {"2": "a", "10": "b", "9": "c"}}]
+    rr = lb.build_run_record(
+        kg_name="K", mode="build", version=1, timestamp="2026-06-25T08:00:12Z",
+        nodes=nodes, passed=1, failed=0)
+    assert [r["pmid"] for r in rr["refs_added"]] == ["2", "9", "10"]  # not "10","2","9"
+
+
 def test_build_run_record_validates_against_schema():
     jsonschema = pytest.importorskip("jsonschema")
     schema_path = os.path.join(os.path.dirname(__file__), "..", "..", "schemas",
