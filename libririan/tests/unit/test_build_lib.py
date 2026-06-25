@@ -85,3 +85,31 @@ def test_synthesize_node_shapes_fields_and_filters_supports():
     assert set(out["supports"]) == {"2"}                 # 999 dropped
     assert out["entities"][0] == {"name": "melatonin", "type": "drug"}  # no id
     assert out["keywords"] and out["detail"]
+
+
+def test_slugify_is_snake_case_and_short():
+    assert build.slugify("Melatonin & the SCN clock, revisited!") in (
+        "melatonin_the_scn", "melatonin_scn_clock")
+    assert " " not in build.slugify("A B C D E F")
+
+
+def test_assign_ids_sequential_with_files():
+    nodes = [{"title": "Sleep latency"}, {"title": "Clock genes"}]
+    out = build.assign_ids(nodes, start=1)
+    assert out[0]["id"] == "node_001"
+    assert out[0]["file"].startswith("node_001_")
+    assert out[1]["id"] == "node_002"
+
+
+def test_render_node_markdown_frontmatter_and_body():
+    node = {"id": "node_001", "title": "Sleep latency", "tags": ["sleep"],
+            "summary": "Melatonin shortens sleep latency.", "detail": "Detail text.",
+            "keywords": ["melatonin"], "entities": [{"name": "melatonin", "type": "drug"}],
+            "supports": {"2": "Reports reduced latency."},
+            "related_nodes": [], "relationships": {}}
+    fm, body = build.render_node_markdown(node, today="2026-06-24")
+    assert fm["id"] == "node_001"
+    assert fm["evaluation_status"] == "pending"
+    assert fm["pubmed_ids"][0] == {"pmid": "2", "supports": "Reports reduced latency.",
+                                   "verified": False, "evidence_tier": "unclassified"}
+    assert "## Summary" in body and "## Detail" in body and "### Literature" in body

@@ -7,6 +7,8 @@ Every function that needs the model takes an injected ``chat`` callable
 file writes — these functions only reason and return validated data.
 """
 
+import re
+
 from lib import llm
 
 TIERS = {
@@ -149,3 +151,50 @@ def synthesize_node(skeleton_node, articles_by_pmid, *, chat):
         "entities": entities,
         "supports": supports,
     }
+
+
+def slugify(title):
+    words = re.findall(r"[a-z0-9]+", title.lower())
+    return "_".join(words[:3]) if words else "node"
+
+
+def assign_ids(nodes, start=1):
+    out = []
+    for i, n in enumerate(nodes):
+        node = dict(n)
+        num = start + i
+        node["id"] = f"node_{num:03d}"
+        node["file"] = f"{node['id']}_{slugify(node.get('title', 'node'))}.md"
+        out.append(node)
+    return out
+
+
+def render_node_markdown(node, today):
+    fm = {
+        "id": node["id"],
+        "title": node["title"],
+        "tags": node.get("tags") or ["general"],
+        "evidence_tier": "unclassified",
+        "pubmed_ids": [
+            {"pmid": p, "supports": claim, "verified": False, "evidence_tier": "unclassified"}
+            for p, claim in node.get("supports", {}).items()
+        ],
+        "entities": node.get("entities", []),
+        "related_nodes": node.get("related_nodes", []),
+        "relationships": node.get("relationships", {}),
+        "created": today,
+        "updated": today,
+        "evaluation_status": "pending",
+    }
+    related = "\n".join(
+        f"- [[{rid}]] ({node['relationships'].get(rid, 'related_to')})"
+        for rid in node.get("related_nodes", [])) or "- (none yet)"
+    body = (
+        f"# {node['title']}\n\n"
+        f"## Summary\n{node['summary']}\n\n"
+        f"## Detail\n{node.get('detail', '')}\n\n"
+        f"## Evidence\n\n### Literature\n"
+        f"- (stamped by stamp_literature.py)\n\n"
+        f"## Related Concepts\n{related}\n"
+    )
+    return fm, body
