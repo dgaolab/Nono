@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import pytest
@@ -67,3 +68,39 @@ def test_ledger_batch_for_used_shape():
     assert batch[0]["disposition"] == "used"
     assert batch[0]["pmid"] == "1"
     assert batch[0]["publication_types"] == ["Journal Article"]
+
+
+def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
+    kg = tmp_path / "KG_Mel"
+    def esearch(q, retmax=10, **kw):
+        return ["1", "2"]
+    def fetch_metadata(pmids):
+        return {p: {"title": f"T{p}", "abstract": f"Melatonin fact {p}.", "pmcid": None,
+                    "authors": [], "journal": "J", "year": "2021", "publication_types": []}
+                for p in pmids}
+    def fetch_full_text(pmcid):
+        return ""
+    # plan_search, skeleton, 2x node synth, relationships, then per-PMID eval verdicts
+    replies = iter([
+        '{"breadth": "narrow", "sub_queries": ["melatonin clock", "melatonin sleep"]}',
+        '{"nodes": [{"title": "Entrainment", "summary": "Melatonin fact 1.", "pmids": ["1"]},'
+        '{"title": "Latency", "summary": "Melatonin fact 2.", "pmids": ["2"]}]}',
+        '{"title": "Entrainment", "summary": "Melatonin fact 1.", "detail": "d", "tags": ["c"],'
+        '"keywords": ["k"], "entities": [], "supports": {"1": "Melatonin fact 1."}}',
+        '{"title": "Latency", "summary": "Melatonin fact 2.", "detail": "d", "tags": ["c"],'
+        '"keywords": ["k"], "entities": [], "supports": {"2": "Melatonin fact 2."}}',
+        '{"edges": []}',
+        # evaluator verdicts (one per node/pmid) — supported with verbatim quote
+        '{"verdict": "supported", "reasoning": "ok", "quotes": [{"text": "Melatonin fact 1.", "source": "abstract"}]}',
+        '{"verdict": "supported", "reasoning": "ok", "quotes": [{"text": "Melatonin fact 2.", "source": "abstract"}]}',
+    ])
+    def chat(messages, **kw):
+        return next(replies)
+    summary = lb.run_build(
+        "melatonin", str(kg), "KG_Mel", esearch=esearch, fetch_metadata=fetch_metadata,
+        fetch_full_text=fetch_full_text, chat=chat, breadth_override="narrow",
+        today="2026-06-24", run_subprocess=False)
+    assert summary["nodes"] == 2
+    manifest = json.loads((kg / "manifest.json").read_text())
+    assert len(manifest["nodes"]) == 2
+    assert (kg / "nodes" / manifest["nodes"][0]["file"]).exists()

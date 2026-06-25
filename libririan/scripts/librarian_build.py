@@ -20,7 +20,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import build, evaluate, llm, pubmed
+from lib import build, llm, pubmed
 from lib.frontmatter import write as write_node
 
 
@@ -89,3 +89,142 @@ def ledger_batch_for_used(articles):
             "year": m.get("year"), "publication_types": m.get("publication_types", []),
         })
     return batch
+
+
+def _now_date():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+
+def _run(scripts_dir, *args):
+    subprocess.run([sys.executable, *args], check=True)
+
+
+def _evaluate_and_writeback(kg_folder, nodes, today, *, fetch_metadata, fetch_full_text, chat):
+    """Evaluate each node with librarian_evaluate and write results back to disk.
+
+    Shared by run_build and (later) run_update so the ~20-line loop is not
+    duplicated. Returns (passed, failed) counts.
+    """
+    import librarian_evaluate as le
+    passed = failed = 0
+    fm_by_node = {}
+    for n in nodes:
+        node_fm = {"title": n["title"],
+                   "pubmed_ids": [{"pmid": p, "supports": c} for p, c in n["supports"].items()]}
+        entry = le.evaluate_node(
+            n["id"], node_fm, fetch_metadata=fetch_metadata,
+            fetch_full_text=fetch_full_text, chat=chat)
+        fm_by_node[n["id"]] = le.frontmatter_updates(entry)
+        passed += entry["overall_status"] == "passed"
+        failed += entry["overall_status"] == "failed"
+    # apply evaluation results to node files
+    for n in nodes:
+        path = os.path.join(kg_folder, "nodes", n["file"])
+        fm, body = build.render_node_markdown(n, today)
+        upd = fm_by_node[n["id"]]
+        fm["evaluation_status"] = upd["evaluation_status"]
+        fm["quarantined"] = upd["quarantined"]
+        verified = {r["pmid"]: r for r in upd["pubmed_ids"]}
+        for ref in fm["pubmed_ids"]:
+            r = verified.get(ref["pmid"])
+            if r:
+                ref["verified"] = r["verified"]
+                if r.get("quotes"):
+                    ref["quotes"] = r["quotes"]
+        write_node(path, fm, body)
+    return passed, failed
+
+
+def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_text,
+              chat, breadth_override, today, run_subprocess=True):
+    os.makedirs(os.path.join(kg_folder, "nodes"), exist_ok=True)
+    scripts_dir = os.path.dirname(os.path.abspath(__file__))
+
+    plan = build.plan_search(topic, chat=chat, breadth_override=breadth_override)
+    breadth, sub_queries = plan["breadth"], plan["sub_queries"]
+    tier = build.TIERS[breadth]
+
+    if run_subprocess:
+        _run(scripts_dir, os.path.join(scripts_dir, "pmid_ledger.py"), "init",
+             kg_folder, "--kg-name", kg_name)
+        known = set(subprocess.run(
+            [sys.executable, os.path.join(scripts_dir, "pmid_ledger.py"), "query",
+             kg_folder, "--pmids-only"], capture_output=True, text=True, check=True
+        ).stdout.split())
+    else:
+        known = set()
+
+    articles = gather_articles(
+        sub_queries, esearch=esearch, fetch_metadata=fetch_metadata,
+        fetch_full_text=fetch_full_text, known_pmids=known, tier=tier)
+    if not articles:
+        raise build.BuildError("no articles retrieved for topic")
+
+    nodes, manifest = construct_graph(
+        topic, kg_name, articles, chat=chat, breadth=breadth,
+        sub_queries=sub_queries, today=today)
+    write_nodes(kg_folder, nodes, today)
+    with open(os.path.join(kg_folder, "manifest.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
+
+    if run_subprocess:
+        batch_path = os.path.join(kg_folder, "_build_ledger_batch.json")
+        with open(batch_path, "w", encoding="utf-8") as fh:
+            json.dump(ledger_batch_for_used(articles), fh)
+        _run(scripts_dir, os.path.join(scripts_dir, "pmid_ledger.py"), "batch-add",
+             kg_folder, "--input", batch_path)
+        os.remove(batch_path)
+        _run(scripts_dir, os.path.join(scripts_dir, "classify_evidence_tier.py"),
+             kg_folder, "--update-ledger")
+        _run(scripts_dir, os.path.join(scripts_dir, "stamp_literature.py"), kg_folder)
+
+    # Phase 3 evaluation — reuse the Phase-2 evaluator in-process.
+    passed, failed = _evaluate_and_writeback(
+        kg_folder, nodes, today,
+        fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text, chat=chat)
+
+    if run_subprocess:
+        _run(scripts_dir, os.path.join(scripts_dir, "enforce_quarantine.py"), kg_folder)
+        _run(scripts_dir, os.path.join(scripts_dir, "generate_index.py"), kg_folder,
+             "--overview-text", f"Knowledge graph on {topic}.")
+        _run(scripts_dir, os.path.join(scripts_dir, "update_manifest_stats.py"), kg_folder)
+        _run(scripts_dir, os.path.join(scripts_dir, "validate_manifest.py"),
+             os.path.join(kg_folder, "manifest.json"))
+        subprocess.run([sys.executable, os.path.join(scripts_dir, "build_embeddings.py"),
+                        kg_folder], check=False)  # non-fatal
+        _run(scripts_dir, os.path.join(scripts_dir, "append_log.py"), kg_folder,
+             "--op", "build",
+             "--summary", f"Local BUILD: {len(nodes)} nodes, {passed} passed, {failed} failed.")
+
+    return {"nodes": len(nodes), "passed": passed, "failed": failed, "kg_folder": kg_folder}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Claude-free KG build orchestrator")
+    parser.add_argument("topic")
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--since", default=None)
+    parser.add_argument("--breadth", choices=["narrow", "medium", "broad"], default=None)
+    parser.add_argument("--interactive", action="store_true")
+    args = parser.parse_args(argv)
+
+    kg_name = args.output or "KG_" + build.slugify(args.topic)
+    kg_folder = kg_name
+    try:
+        summary = run_build(
+            args.topic, kg_folder, kg_name, esearch=pubmed.esearch,
+            fetch_metadata=pubmed.fetch_metadata, fetch_full_text=pubmed.fetch_full_text,
+            chat=llm.chat, breadth_override=args.breadth, today=_now_date())
+    except llm.LLMUnavailable as e:
+        print(f"Error: local model unavailable — nothing written: {e}", file=sys.stderr)
+        return 2
+    except build.BuildError as e:
+        print(f"Error: build failed — {e}", file=sys.stderr)
+        return 1
+    print(f"BUILD complete: {summary['nodes']} nodes "
+          f"({summary['passed']} passed, {summary['failed']} failed) → {summary['kg_folder']}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
