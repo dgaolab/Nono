@@ -312,7 +312,7 @@ def main(argv=None):
             print(f"UPDATE complete: {len(summary['nodes_created'])} new nodes "
                   f"({summary['passed']} passed, {summary['failed']} failed) → {kg_folder}")
     except llm.LLMUnavailable as e:
-        print(f"Error: local model unavailable — nothing written: {e}", file=sys.stderr)
+        print(f"Error: local model unavailable — aborted; any partial output can be completed by re-running: {e}", file=sys.stderr)
         return 2
     except build.BuildError as e:
         print(f"Error: build failed — {e}", file=sys.stderr)
