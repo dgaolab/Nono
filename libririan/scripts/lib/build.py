@@ -106,3 +106,46 @@ def propose_skeleton(topic, articles, *, chat, nodes_min, nodes_max):
     if not out:
         raise BuildError("skeleton produced no usable nodes")
     return out
+
+
+_NODE_SYS = (
+    "You write one biomedical knowledge-graph node from its supporting articles. "
+    "Reply with ONE JSON object: {\"title\": \"...\", \"summary\": \"one sentence\", "
+    "\"detail\": \"a paragraph\", \"tags\": [\"category\", \"...\"], "
+    "\"keywords\": [\"3-8 search terms\"], "
+    "\"entities\": [{\"name\": \"...\", \"type\": \"gene|variant|phenotype|drug|pathway|protein|disease\"}], "
+    "\"supports\": {\"<pmid>\": \"what this article contributes\"}}. "
+    "tags[0] is a broad category. Use ONLY the provided PMIDs. Do NOT invent "
+    "identifiers; entities carry name and type only."
+)
+
+
+def synthesize_node(skeleton_node, articles_by_pmid, *, chat):
+    """Flesh out one node; filter supports to real PMIDs, strip entity IDs."""
+    pmids = skeleton_node["pmids"]
+    arts = [articles_by_pmid[p] for p in pmids if p in articles_by_pmid]
+    user = (f"NODE TITLE: {skeleton_node['title']}\n"
+            f"WORKING SUMMARY: {skeleton_node['summary']}\n"
+            f"SUPPORTING PMIDS: {', '.join(pmids)}\n\n"
+            f"ARTICLES:\n{_articles_blob(arts)}")
+    obj = _ask_json(chat, [{"role": "system", "content": _NODE_SYS},
+                           {"role": "user", "content": user}])
+    allowed = set(pmids)
+    supports = {k: str(v).strip() for k, v in (obj.get("supports") or {}).items()
+                if k in allowed}
+    if not supports:                       # never leave a node unreferenced
+        supports = {p: skeleton_node["summary"] for p in pmids}
+    entities = [{"name": str(e.get("name", "")).strip(), "type": str(e.get("type", "")).strip()}
+                for e in (obj.get("entities") or []) if str(e.get("name", "")).strip()]
+    tags = [str(t).strip() for t in (obj.get("tags") or []) if str(t).strip()] or ["general"]
+    keywords = [str(k).strip() for k in (obj.get("keywords") or []) if str(k).strip()]
+    return {
+        "title": str(obj.get("title") or skeleton_node["title"]).strip(),
+        "summary": str(obj.get("summary") or skeleton_node["summary"]).strip(),
+        "detail": str(obj.get("detail", "")).strip(),
+        "tags": tags,
+        "category": tags[0],
+        "keywords": keywords,
+        "entities": entities,
+        "supports": supports,
+    }

@@ -66,3 +66,22 @@ def test_propose_skeleton_filters_hallucinated_pmids_and_empty_nodes():
     assert out[0]["pmids"] == ["1"]          # 999 dropped
     assert out[1]["pmids"] == ["2"]
     assert all(n["title"] and n["summary"] for n in out)
+
+
+def test_synthesize_node_shapes_fields_and_filters_supports():
+    skel = {"title": "Sleep latency", "summary": "Melatonin shortens sleep latency.", "pmids": ["2"]}
+    arts = {"2": {"pmid": "2", "title": "Melatonin for sleep", "abstract": "Melatonin reduces sleep latency."}}
+    reply = (
+        '{"title": "Sleep latency", "summary": "Melatonin shortens sleep latency.",'
+        '"detail": "Across trials melatonin reduced latency.",'
+        '"tags": ["sleep", "melatonin"], "keywords": ["melatonin", "sleep latency"],'
+        '"entities": [{"name": "melatonin", "type": "drug", "normalized_id": "FAKE:1"}],'
+        '"supports": {"2": "Reports reduced sleep latency.", "999": "should be dropped"}}'
+    )
+    def chat(messages, **kw):
+        return reply
+    out = build.synthesize_node(skel, arts, chat=chat)
+    assert out["category"] == "sleep"
+    assert set(out["supports"]) == {"2"}                 # 999 dropped
+    assert out["entities"][0] == {"name": "melatonin", "type": "drug"}  # no id
+    assert out["keywords"] and out["detail"]
