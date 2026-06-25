@@ -61,3 +61,14 @@ def test_config_prefers_explicit_then_env_then_default(monkeypatch):
 
     # explicit args win over environment
     assert llm._config("http://explicit/v1", "explicit-model", "key")[0] == "http://explicit/v1"
+
+
+def test_extract_json_object_from_fenced_prose():
+    text = 'Here:\n```json\n{"a": 1, "b": {"c": 2}}\n```\nthanks'
+    assert llm.extract_json_object(text) == {"a": 1, "b": {"c": 2}}
+
+
+def test_extract_json_object_raises_when_absent():
+    import pytest
+    with pytest.raises(ValueError):
+        llm.extract_json_object("no json here")

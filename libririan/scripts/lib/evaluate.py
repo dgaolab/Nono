@@ -37,28 +37,13 @@ class EvaluationError(RuntimeError):
     """Raised when a model reply cannot be parsed into a valid verdict."""
 
 
-def _extract_json(text):
-    """Return the outermost ``{...}`` object substring from a model reply."""
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        raise EvaluationError("no JSON object found in model reply")
-    return text[start:end + 1]
-
-
 def parse_response(text):
-    """Parse a model reply into ``{verdict, reasoning, quotes}`` or raise.
-
-    Tolerates code fences and surrounding prose (small models add both). The
-    verdict is lowercased/stripped and must be one of ``VERDICTS``; reasoning
-    and quotes default to empty when omitted.
-    """
+    """Parse a model reply into ``{verdict, reasoning, quotes}`` or raise."""
+    from lib import llm
     try:
-        obj = json.loads(_extract_json(text))
-    except (ValueError, TypeError) as e:
+        obj = llm.extract_json_object(text)
+    except ValueError as e:
         raise EvaluationError(f"reply was not valid JSON: {e}") from e
-    if not isinstance(obj, dict):
-        raise EvaluationError("reply JSON was not an object")
     verdict = str(obj.get("verdict", "")).strip().lower()
     if verdict not in VERDICTS:
         raise EvaluationError(f"unknown verdict: {obj.get('verdict')!r}")

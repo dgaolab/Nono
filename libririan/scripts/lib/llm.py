@@ -73,3 +73,19 @@ def chat(messages, *, model=None, base_url=None, api_key=None,
         return data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as e:
         raise LLMUnavailable(f"unexpected response shape from {url}: {e}") from e
+
+
+def extract_json_object(text):
+    """Parse the first balanced ``{...}`` object out of a model reply.
+
+    Tolerates code fences and surrounding prose. Raises ``ValueError`` if no
+    parseable JSON object is present.
+    """
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("no JSON object found in model reply")
+    obj = json.loads(text[start:end + 1])
+    if not isinstance(obj, dict):
+        raise ValueError("model reply JSON was not an object")
+    return obj
