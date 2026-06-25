@@ -198,3 +198,42 @@ def render_node_markdown(node, today):
         f"## Related Concepts\n{related}\n"
     )
     return fm, body
+
+
+RELATIONSHIPS = {"is_part_of", "depends_on", "supports", "contradicts",
+                 "related_to", "derived_from", "mechanism_of"}
+
+_REL_SYS = (
+    "You connect biomedical knowledge nodes. Reply with ONE JSON object: "
+    "{\"edges\": [{\"source\": \"<node_id>\", \"target\": \"<node_id>\", "
+    "\"relationship\": \"is_part_of|depends_on|supports|contradicts|related_to|"
+    "derived_from|mechanism_of\"}]}. Use only the listed node IDs."
+)
+
+
+def _shared_pmid_edges(nodes):
+    edges = []
+    for i, a in enumerate(nodes):
+        for b in nodes[i + 1:]:
+            if set(a.get("pmids", [])) & set(b.get("pmids", [])):
+                edges.append({"source": a["id"], "target": b["id"],
+                              "relationship": "related_to"})
+    return edges
+
+
+def propose_relationships(nodes, *, chat):
+    ids = {n["id"] for n in nodes}
+    listing = "\n".join(f"{n['id']}: {n['title']} — {n['summary']}" for n in nodes)
+    try:
+        obj = _ask_json(chat, [{"role": "system", "content": _REL_SYS},
+                               {"role": "user", "content": listing}])
+        edges = []
+        for e in obj.get("edges", []) or []:
+            s, t, r = e.get("source"), e.get("target"), e.get("relationship")
+            if s in ids and t in ids and s != t and r in RELATIONSHIPS:
+                edges.append({"source": s, "target": t, "relationship": r})
+        if edges:
+            return edges
+    except BuildError:
+        pass
+    return _shared_pmid_edges(nodes)

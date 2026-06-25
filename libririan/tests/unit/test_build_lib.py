@@ -113,3 +113,31 @@ def test_render_node_markdown_frontmatter_and_body():
     assert fm["pubmed_ids"][0] == {"pmid": "2", "supports": "Reports reduced latency.",
                                    "verified": False, "evidence_tier": "unclassified"}
     assert "## Summary" in body and "## Detail" in body and "### Literature" in body
+
+
+_REL_NODES = [
+    {"id": "node_001", "title": "A", "summary": "sa", "pmids": ["1", "2"]},
+    {"id": "node_002", "title": "B", "summary": "sb", "pmids": ["2"]},
+    {"id": "node_003", "title": "C", "summary": "sc", "pmids": ["9"]},
+]
+
+
+def test_propose_relationships_validates_edges():
+    reply = ('{"edges": [{"source": "node_001", "target": "node_002", "relationship": "supports"},'
+             '{"source": "node_001", "target": "node_999", "relationship": "supports"},'
+             '{"source": "node_002", "target": "node_001", "relationship": "bogus"}]}')
+    def chat(messages, **kw):
+        return reply
+    out = build.propose_relationships(_REL_NODES, chat=chat)
+    assert {"source": "node_001", "target": "node_002", "relationship": "supports"} in out
+    assert all(e["target"] != "node_999" for e in out)
+    assert all(e["relationship"] != "bogus" for e in out)
+
+
+def test_propose_relationships_falls_back_to_shared_pmids():
+    def chat(messages, **kw):
+        return "garbage"
+    out = build.propose_relationships(_REL_NODES, chat=chat)
+    # node_001 & node_002 share PMID 2 → a related_to edge; node_003 shares none
+    assert any({e["source"], e["target"]} == {"node_001", "node_002"} for e in out)
+    assert all("node_003" not in (e["source"], e["target"]) for e in out)
