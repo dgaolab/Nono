@@ -21,7 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import build, llm, pubmed
-from lib.frontmatter import write as write_node
+from lib.frontmatter import parse as parse_node, write as write_node
 
 
 def construct_graph(topic, kg_name, articles, *, chat, breadth, sub_queries,
@@ -95,7 +95,7 @@ def _now_date():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
 
-def _run(scripts_dir, *args):
+def _run(*args):
     subprocess.run([sys.executable, *args], check=True)
 
 
@@ -117,15 +117,16 @@ def _evaluate_and_writeback(kg_folder, nodes, today, *, fetch_metadata, fetch_fu
         fm_by_node[n["id"]] = le.frontmatter_updates(entry)
         passed += entry["overall_status"] == "passed"
         failed += entry["overall_status"] == "failed"
-    # apply evaluation results to node files
+    # apply evaluation results to node files — read existing files to preserve
+    # any changes made by classify_evidence_tier.py and stamp_literature.py
     for n in nodes:
         path = os.path.join(kg_folder, "nodes", n["file"])
-        fm, body = build.render_node_markdown(n, today)
+        fm, body = parse_node(path)
         upd = fm_by_node[n["id"]]
         fm["evaluation_status"] = upd["evaluation_status"]
         fm["quarantined"] = upd["quarantined"]
         verified = {r["pmid"]: r for r in upd["pubmed_ids"]}
-        for ref in fm["pubmed_ids"]:
+        for ref in fm.get("pubmed_ids", []):
             r = verified.get(ref["pmid"])
             if r:
                 ref["verified"] = r["verified"]
@@ -145,12 +146,12 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
     tier = build.TIERS[breadth]
 
     if run_subprocess:
-        _run(scripts_dir, os.path.join(scripts_dir, "pmid_ledger.py"), "init",
+        _run(os.path.join(scripts_dir, "pmid_ledger.py"), "init",
              kg_folder, "--kg-name", kg_name)
-        known = set(subprocess.run(
+        known = set(json.loads(subprocess.run(
             [sys.executable, os.path.join(scripts_dir, "pmid_ledger.py"), "query",
              kg_folder, "--pmids-only"], capture_output=True, text=True, check=True
-        ).stdout.split())
+        ).stdout))
     else:
         known = set()
 
@@ -171,12 +172,12 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
         batch_path = os.path.join(kg_folder, "_build_ledger_batch.json")
         with open(batch_path, "w", encoding="utf-8") as fh:
             json.dump(ledger_batch_for_used(articles), fh)
-        _run(scripts_dir, os.path.join(scripts_dir, "pmid_ledger.py"), "batch-add",
+        _run(os.path.join(scripts_dir, "pmid_ledger.py"), "batch-add",
              kg_folder, "--input", batch_path)
         os.remove(batch_path)
-        _run(scripts_dir, os.path.join(scripts_dir, "classify_evidence_tier.py"),
+        _run(os.path.join(scripts_dir, "classify_evidence_tier.py"),
              kg_folder, "--update-ledger")
-        _run(scripts_dir, os.path.join(scripts_dir, "stamp_literature.py"), kg_folder)
+        _run(os.path.join(scripts_dir, "stamp_literature.py"), kg_folder)
 
     # Phase 3 evaluation — reuse the Phase-2 evaluator in-process.
     passed, failed = _evaluate_and_writeback(
@@ -184,15 +185,15 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
         fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text, chat=chat)
 
     if run_subprocess:
-        _run(scripts_dir, os.path.join(scripts_dir, "enforce_quarantine.py"), kg_folder)
-        _run(scripts_dir, os.path.join(scripts_dir, "generate_index.py"), kg_folder,
+        _run(os.path.join(scripts_dir, "enforce_quarantine.py"), kg_folder)
+        _run(os.path.join(scripts_dir, "generate_index.py"), kg_folder,
              "--overview-text", f"Knowledge graph on {topic}.")
-        _run(scripts_dir, os.path.join(scripts_dir, "update_manifest_stats.py"), kg_folder)
-        _run(scripts_dir, os.path.join(scripts_dir, "validate_manifest.py"),
+        _run(os.path.join(scripts_dir, "update_manifest_stats.py"), kg_folder)
+        _run(os.path.join(scripts_dir, "validate_manifest.py"),
              os.path.join(kg_folder, "manifest.json"))
         subprocess.run([sys.executable, os.path.join(scripts_dir, "build_embeddings.py"),
                         kg_folder], check=False)  # non-fatal
-        _run(scripts_dir, os.path.join(scripts_dir, "append_log.py"), kg_folder,
+        _run(os.path.join(scripts_dir, "append_log.py"), kg_folder,
              "--op", "build",
              "--summary", f"Local BUILD: {len(nodes)} nodes, {passed} passed, {failed} failed.")
 
@@ -216,7 +217,7 @@ def main(argv=None):
             fetch_metadata=pubmed.fetch_metadata, fetch_full_text=pubmed.fetch_full_text,
             chat=llm.chat, breadth_override=args.breadth, today=_now_date())
     except llm.LLMUnavailable as e:
-        print(f"Error: local model unavailable — nothing written: {e}", file=sys.stderr)
+        print(f"Error: local model unavailable — aborted; any partial output can be completed by re-running: {e}", file=sys.stderr)
         return 2
     except build.BuildError as e:
         print(f"Error: build failed — {e}", file=sys.stderr)

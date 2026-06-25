@@ -101,6 +101,8 @@ def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
         fetch_full_text=fetch_full_text, chat=chat, breadth_override="narrow",
         today="2026-06-24", run_subprocess=False)
     assert summary["nodes"] == 2
+    assert summary["passed"] == 2
+    assert summary["failed"] == 0
     manifest = json.loads((kg / "manifest.json").read_text())
     assert len(manifest["nodes"]) == 2
     assert (kg / "nodes" / manifest["nodes"][0]["file"]).exists()
