@@ -265,7 +265,7 @@ def assemble_manifest(kg_name, topic, breadth, sub_queries, nodes, edges, today)
         "search_profile": {"breadth": breadth, "sub_queries": sub_queries, "updated": today},
         "nodes": [
             {
-                "id": n["id"], "title": n["title"], "file": n["file"],
+                "id": n["id"], "title": n["title"], "file": f"nodes/{n['file']}",
                 "tags": n.get("tags") or ["general"], "summary": n["summary"],
                 "keywords": n.get("keywords", []),
                 "pubmed_ids": list(n.get("supports", {}).keys()),
