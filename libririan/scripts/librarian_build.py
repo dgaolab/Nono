@@ -200,6 +200,74 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
     return {"nodes": len(nodes), "passed": passed, "failed": failed, "kg_folder": kg_folder}
 
 
+def next_node_number(manifest):
+    """Return highest existing node_NNN number + 1, or 1 if there are none."""
+    nums = [int(n["id"].split("_")[1]) for n in manifest.get("nodes", [])
+            if n.get("id", "").startswith("node_")]
+    return (max(nums) + 1) if nums else 1
+
+
+def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, chat,
+               since_date, today, run_subprocess=True):
+    """Load an existing KG manifest, gather new articles, append new nodes/edges.
+
+    Never deletes or rewrites existing nodes. Returns a summary dict with
+    nodes_created, passed, failed, changelog, kg_folder.
+    """
+    with open(os.path.join(kg_folder, "manifest.json"), encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    breadth = manifest.get("search_profile", {}).get("breadth", "medium")
+    tier = build.TIERS[breadth]
+    recent_qs = manifest.get("search_profile", {}).get("sub_queries", [])
+
+    # split sub-query budget ~60/40 recent/gap-fill
+    n_gap = max(1, tier["sub_queries"] - len(recent_qs)) if recent_qs else 1
+    weak_ids = set(build.weak_spots(manifest["nodes"]))
+    weak_summaries = [n["summary"] for n in manifest["nodes"] if n["id"] in weak_ids]
+    try:
+        gap_qs = build.gap_fill_queries(topic, weak_summaries or [topic], chat=chat, count=n_gap)
+    except build.BuildError:
+        gap_qs = []
+
+    if run_subprocess:
+        scripts_dir = os.path.dirname(os.path.abspath(__file__))
+        known = set(subprocess.run(
+            [sys.executable, os.path.join(scripts_dir, "pmid_ledger.py"), "query",
+             kg_folder, "--pmids-only"], capture_output=True, text=True, check=True
+        ).stdout.split())
+    else:
+        known = {p for n in manifest["nodes"] for p in n.get("pubmed_ids", [])}
+
+    articles = gather_articles(recent_qs + gap_qs, esearch=esearch,
+                               fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text,
+                               known_pmids=known, tier=tier)
+    if not articles:
+        return {"nodes_created": [], "passed": 0, "failed": 0, "changelog": [], "kg_folder": kg_folder}
+
+    start = next_node_number(manifest)
+    new_nodes, sub_manifest = construct_graph(
+        topic, manifest["kg_name"], articles, chat=chat, breadth=breadth,
+        sub_queries=recent_qs, today=today, start_id=start)
+    write_nodes(kg_folder, new_nodes, today)
+
+    manifest["nodes"].extend(sub_manifest["nodes"])
+    manifest["edges"].extend(sub_manifest["edges"])
+    manifest["version"] = manifest.get("version", 1) + 1
+    manifest["updated"] = today
+    manifest.setdefault("search_profile", {})["updated"] = today
+    with open(os.path.join(kg_folder, "manifest.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=2)
+
+    # Evaluate new nodes via the shared helper (reads node files written above).
+    passed, failed = _evaluate_and_writeback(
+        kg_folder, new_nodes, today,
+        fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text, chat=chat)
+
+    changelog = [{"id": n["id"], "title": n["title"]} for n in new_nodes]
+    return {"nodes_created": [n["id"] for n in new_nodes], "passed": passed,
+            "failed": failed, "changelog": changelog, "kg_folder": kg_folder}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Claude-free KG build orchestrator")
     parser.add_argument("topic")

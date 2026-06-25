@@ -70,6 +70,52 @@ def test_ledger_batch_for_used_shape():
     assert batch[0]["publication_types"] == ["Journal Article"]
 
 
+def test_next_node_number():
+    assert lb.next_node_number({"nodes": [{"id": "node_001"}, {"id": "node_004"}]}) == 5
+    assert lb.next_node_number({"nodes": []}) == 1
+
+
+def test_run_update_appends_new_nodes(tmp_path):
+    kg = tmp_path / "KG_Mel"
+    (kg / "nodes").mkdir(parents=True)
+    manifest = {"kg_name": "KG_Mel", "topic": "melatonin", "version": 1,
+                "data_sources": ["pubmed"],
+                "search_profile": {"breadth": "narrow", "sub_queries": ["melatonin clock"]},
+                "nodes": [{"id": "node_001", "title": "Existing", "file": "node_001_existing.md",
+                           "tags": ["c"], "summary": "old", "keywords": [], "pubmed_ids": ["1"],
+                           "evaluation_status": "passed", "evidence_tier": "review", "entities": []}],
+                "edges": [], "statistics": {}}
+    (kg / "manifest.json").write_text(json.dumps(manifest))
+    def esearch(q, retmax=10, **kw):
+        return ["2"]                       # one novel PMID
+    def fetch_metadata(pmids):
+        return {p: {"title": f"T{p}", "abstract": f"New melatonin fact {p}.", "pmcid": None,
+                    "authors": [], "journal": "J", "year": "2022", "publication_types": []}
+                for p in pmids}
+    replies = iter([
+        # gap-fill queries
+        '{"queries": ["melatonin pineal"]}',
+        # skeleton (new nodes)
+        '{"nodes": [{"title": "New finding", "summary": "New melatonin fact 2.", "pmids": ["2"]}]}',
+        # node synthesis
+        '{"title": "New finding", "summary": "New melatonin fact 2.", "detail": "d", "tags": ["c"],'
+        '"keywords": ["k"], "entities": [], "supports": {"2": "New melatonin fact 2."}}',
+        # relationships among new nodes
+        '{"edges": []}',
+        # eval verdict
+        '{"verdict": "supported", "reasoning": "ok", "quotes": [{"text": "New melatonin fact 2.", "source": "abstract"}]}',
+    ])
+    def chat(messages, **kw):
+        return next(replies)
+    summary = lb.run_update("melatonin", str(kg), esearch=esearch, fetch_metadata=fetch_metadata,
+                            fetch_full_text=lambda p: "", chat=chat, since_date="2021/01/01",
+                            today="2026-06-24", run_subprocess=False)
+    m = json.loads((kg / "manifest.json").read_text())
+    ids = [n["id"] for n in m["nodes"]]
+    assert "node_001" in ids and "node_002" in ids   # old kept, new appended
+    assert summary["nodes_created"] == ["node_002"]
+
+
 def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
     kg = tmp_path / "KG_Mel"
     def esearch(q, retmax=10, **kw):
