@@ -124,6 +124,34 @@ def _now_date():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
 
+def _now_iso():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def build_run_record(*, kg_name, mode, version, timestamp, nodes, passed, failed,
+                     since_date=None):
+    """Build a run-record dict (conforms to schemas/run_record_schema.json).
+
+    Pure (clock injected via ``timestamp``). ``run_id`` is the timestamp with
+    colons stripped plus ``-v<version>`` (e.g. ``2026-06-25T080012Z-v1``),
+    matching the build-kg convention. ``refs_added`` groups the node IDs that
+    cite each PMID this run; ``nodes`` are the run's newly created nodes.
+    """
+    run_id = timestamp.replace(":", "") + f"-v{version}"
+    refs = {}
+    for n in nodes:
+        for pmid in n.get("supports", {}):
+            refs.setdefault(pmid, set()).add(n["id"])
+    refs_added = [{"pmid": p, "nodes": sorted(ns)} for p, ns in sorted(refs.items())]
+    return {
+        "run_id": run_id, "kg_name": kg_name, "mode": mode, "timestamp": timestamp,
+        "version": version, "since_date": since_date,
+        "nodes_created": [n["id"] for n in nodes], "nodes_revised": [],
+        "refs_added": refs_added, "refs_failed": [],
+        "eval_summary": {"evaluated": len(nodes), "passed": passed, "failed": failed},
+    }
+
+
 def _run(*args):
     subprocess.run([sys.executable, *args], check=True)
 
@@ -179,8 +207,14 @@ def _persist_and_classify(scripts_dir, kg_folder, articles):
     _run(os.path.join(scripts_dir, "stamp_literature.py"), kg_folder)
 
 
-def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None):
-    """Quarantine enforcement, index, stats, validation, embeddings (non-fatal), log."""
+def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None,
+                 run_record=None):
+    """Quarantine enforcement, index, stats, validation, embeddings (non-fatal), log.
+
+    When ``run_record`` is provided, also writes ``runs/<run_id>.json`` and
+    renders the audit digest (``digests/<run_id>.md`` + ``_digest.md``). Digest
+    rendering is non-fatal — it never fails the run.
+    """
     _run(os.path.join(scripts_dir, "enforce_quarantine.py"), kg_folder)
     if overview_text is not None:
         _run(os.path.join(scripts_dir, "generate_index.py"), kg_folder,
@@ -194,6 +228,15 @@ def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None):
                     kg_folder], check=False)  # non-fatal
     _run(os.path.join(scripts_dir, "append_log.py"), kg_folder,
          "--op", op, "--summary", summary)
+    if run_record is not None:
+        runs_dir = os.path.join(kg_folder, "runs")
+        os.makedirs(runs_dir, exist_ok=True)
+        rr_path = os.path.join(runs_dir, run_record["run_id"] + ".json")
+        with open(rr_path, "w", encoding="utf-8") as fh:
+            json.dump(run_record, fh, indent=2)
+        # Digest is read-after-stats; never fails the run (matches build-kg 1e).
+        subprocess.run([sys.executable, os.path.join(scripts_dir, "render_digest.py"),
+                        kg_folder, "--run-record", rr_path], check=False)
 
 
 def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_text,
@@ -240,9 +283,12 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
         fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text, chat=chat)
 
     if run_subprocess:
+        run_record = build_run_record(
+            kg_name=kg_name, mode="build", version=1, timestamp=_now_iso(),
+            nodes=nodes, passed=passed, failed=failed)
         _finalize_kg(scripts_dir, kg_folder, op="build",
                      summary=f"Local BUILD: {len(nodes)} nodes, {passed} passed, {failed} failed.",
-                     overview_text=f"Knowledge graph on {topic}.")
+                     overview_text=f"Knowledge graph on {topic}.", run_record=run_record)
 
     return {"nodes": len(nodes), "passed": passed, "failed": failed, "kg_folder": kg_folder}
 
@@ -320,8 +366,13 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
 
     new_nodes_count = len(new_nodes)
     if run_subprocess:
+        run_record = build_run_record(
+            kg_name=manifest["kg_name"], mode="update", version=manifest["version"],
+            timestamp=_now_iso(), nodes=new_nodes, passed=passed, failed=failed,
+            since_date=since_date)
         _finalize_kg(scripts_dir, kg_folder, op="update",
-                     summary=f"Local UPDATE: {new_nodes_count} new nodes, {passed} passed, {failed} failed.")
+                     summary=f"Local UPDATE: {new_nodes_count} new nodes, {passed} passed, {failed} failed.",
+                     run_record=run_record)
 
     changelog = [{"id": n["id"], "title": n["title"]} for n in new_nodes]
     return {"nodes_created": [n["id"] for n in new_nodes], "passed": passed,

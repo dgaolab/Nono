@@ -12,6 +12,44 @@ _ARTS = [
 ]
 
 
+# --------------------------------------------------------------------------
+# build_run_record — pure run-record builder (GAP-A: digest/run-record parity)
+# --------------------------------------------------------------------------
+
+def test_build_run_record_shape_and_run_id():
+    nodes = [
+        {"id": "node_001", "supports": {"1": "a", "2": "b"}},
+        {"id": "node_002", "supports": {"2": "c"}},
+    ]
+    rr = lb.build_run_record(
+        kg_name="KG_Mel", mode="build", version=1,
+        timestamp="2026-06-25T08:00:12Z", nodes=nodes, passed=2, failed=0)
+    assert rr["run_id"] == "2026-06-25T080012Z-v1"   # colons stripped + -v<version>
+    assert rr["nodes_created"] == ["node_001", "node_002"]
+    assert rr["nodes_revised"] == []
+    assert rr["eval_summary"] == {"evaluated": 2, "passed": 2, "failed": 0}
+    # refs_added groups node ids per pmid (sorted)
+    by_pmid = {r["pmid"]: r["nodes"] for r in rr["refs_added"]}
+    assert by_pmid["1"] == ["node_001"]
+    assert by_pmid["2"] == ["node_001", "node_002"]
+    assert rr["refs_failed"] == []
+
+
+def test_build_run_record_validates_against_schema():
+    jsonschema = pytest.importorskip("jsonschema")
+    schema_path = os.path.join(os.path.dirname(__file__), "..", "..", "schemas",
+                               "run_record_schema.json")
+    with open(schema_path, encoding="utf-8") as fh:
+        schema = json.load(fh)
+    rr = lb.build_run_record(
+        kg_name="KG_Mel", mode="update", version=3,
+        timestamp="2026-06-25T08:00:12Z",
+        nodes=[{"id": "node_003", "supports": {"9": "x"}}],
+        passed=1, failed=0, since_date="2021/01/01")
+    jsonschema.validate(rr, schema)   # raises if non-conforming
+    assert rr["since_date"] == "2021/01/01"
+
+
 def _scripted_chat():
     """Return a chat that answers skeleton, then node, then relationships in order."""
     replies = iter([
@@ -246,7 +284,7 @@ def test_run_build_subprocess_true_finishes_kg(tmp_path):
 
     # Evidence tier classified — "Randomized Controlled Trial" → "rct"
     manifest = json.loads((kg / "manifest.json").read_text())
-    node_file = kg / "nodes" / manifest["nodes"][0]["file"]
+    node_file = kg / manifest["nodes"][0]["file"]   # file is kg-root-relative (nodes/...)
     from lib.frontmatter import parse as parse_fm
     sys.path.insert(0, str(kg.parent.parent.parent / "scripts"))
     fm, _ = parse_fm(str(node_file))
@@ -261,6 +299,13 @@ def test_run_build_subprocess_true_finishes_kg(tmp_path):
     assert manifest["statistics"].get("total_nodes") == 2, (
         f"Expected total_nodes=2, got {manifest['statistics']}"
     )
+
+    # GAP-A: run-record + digest produced
+    runs = list((kg / "runs").glob("*.json"))
+    assert len(runs) == 1, f"expected one run-record, got {runs}"
+    rr = json.loads(runs[0].read_text())
+    assert rr["mode"] == "build" and rr["eval_summary"]["evaluated"] == 2
+    assert (kg / "_digest.md").exists(), "_digest.md not rendered"
 
 
 def _make_integration_chat_update():
@@ -358,6 +403,12 @@ def test_run_update_subprocess_true_persists_novel_pmids(tmp_path):
     # Index still present
     assert (kg / "_index.md").exists(), "_index.md was removed or never regenerated"
 
+    # GAP-A: UPDATE also writes a run-record (mode update) + refreshes the digest
+    update_runs = [p for p in (kg / "runs").glob("*.json")
+                   if json.loads(p.read_text())["mode"] == "update"]
+    assert len(update_runs) == 1, f"expected one update run-record, got {update_runs}"
+    assert (kg / "_digest.md").exists()
+
 
 def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
     kg = tmp_path / "KG_Mel"
@@ -394,4 +445,4 @@ def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
     assert summary["failed"] == 0
     manifest = json.loads((kg / "manifest.json").read_text())
     assert len(manifest["nodes"]) == 2
-    assert (kg / "nodes" / manifest["nodes"][0]["file"]).exists()
+    assert (kg / manifest["nodes"][0]["file"]).exists()   # file is kg-root-relative (nodes/...)
