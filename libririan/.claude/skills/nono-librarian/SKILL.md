@@ -70,8 +70,9 @@ deterministic layer produced.
 
 ## Step 3 — Dispatch by intent
 
-Classify the request and route it. The query and maintenance paths are
-**fully Claude-free today**; build is not yet (see "Scope" below).
+Classify the request and route it. Query, maintenance, and build are all
+**fully Claude-free today** (build quality tracks the local model; see "Scope"
+below for what the local build does not yet cover).
 
 ### Query / search a KG  — Claude-free now
 
@@ -124,26 +125,38 @@ bounds the failure mode (it cannot pass a claim it cannot quote) but a weak
 model may still be over-skeptical. This is the local counterpart to the
 Claude `/evaluate-kg` command, which remains the higher-quality default.
 
-### Build / ingest a new KG — NOT yet Claude-free
+### Build / ingest a KG — Claude-free now (uses the local model)
 
-KG construction currently lives in the Claude agent prompt `.claude/commands/
-build-kg.md` and the Claude PubMed MCP. Running it on a local model requires a
-new retrieval seam (`lib/pubmed.py`, direct E-utilities) and a deterministic
-build orchestrator — a separate, spec'd effort (Phases 1–3), not this skill.
+`scripts/librarian_build.py` constructs (BUILD) or extends (UPDATE) a KG using
+the local model (`lib/llm.py`) + E-utilities (`lib/pubmed.py`), then runs the
+full deterministic finish (ledger, evidence tiers, literature stamping,
+evaluation, quarantine, index, validation, embeddings, log). It auto-detects
+UPDATE when the target folder already has a manifest.
 
-If the user asks to build locally, do **not** silently fall back to Claude.
-Explain that local build isn't implemented yet, point to the design spec at
-`docs/superpowers/specs/` (the Claude-free librarian re-architecture), and offer
-the Claude-based `/build-kg` only if they explicitly accept using Claude.
+```bash
+conda run -n nono python scripts/librarian_build.py "<topic>" \
+    [--output KG_Name] [--since YYYY-MM-DD] [--breadth narrow|medium|broad] [--interactive]
+```
+
+The orchestrator owns control flow; the model only does narrow, schema-validated
+steps (search planning, node skeletons, per-node synthesis, relationships).
+Hallucinated PMIDs are filtered against what PubMed actually returned, and every
+node is verified by the same guardrailed evaluator as `librarian_evaluate.py`.
+If the model endpoint is down the run aborts and writes nothing. Quality tracks
+the local model; the Claude `/build-kg` command remains the higher-quality
+default for important graphs.
 
 ## Scope (be honest about the boundary)
 
 - **Works locally with zero Claude today:** env bootstrap, query/search,
   natural-language answers (when a local endpoint is up), evidence
-  evaluation/fact-checking (when a local endpoint is up), and all maintenance
-  scripts.
-- **Not yet local:** KG building/ingestion. Tracked as a separate
-  re-architecture; this skill is Phase 0 (front door + seams).
+  evaluation/fact-checking (when a local endpoint is up), all maintenance
+  scripts, and KG building/ingestion via `scripts/librarian_build.py` (quality
+  tracks the local model).
+- **Not yet implemented in the local build:** ClinicalTrials.gov and ChEMBL as
+  article sources, entity-ID normalization across nodes, and user-provided
+  `--source` materials. These are genuinely absent from the current
+  implementation; PubMed is the only supported source.
 
 Quality on the local paths that *use* the model (answer synthesis, and later
 build) tracks the local model — a small open-weight model is materially weaker
