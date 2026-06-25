@@ -73,8 +73,11 @@ def construct_graph(topic, kg_name, articles, *, chat, breadth, sub_queries,
 
 
 def gather_articles(sub_queries, *, esearch, fetch_metadata, fetch_full_text,
-                    known_pmids, tier):
-    per_query = [esearch(q, retmax=tier["max_results"]) for q in sub_queries]
+                    known_pmids, tier, mindate=None):
+    per_query = [
+        esearch(q, retmax=tier["max_results"], **({"mindate": mindate} if mindate else {}))
+        for q in sub_queries
+    ]
     pmids = build.select_candidates(per_query, known_pmids, cap=tier["metadata"])
     meta_map = fetch_metadata(pmids) if pmids else {}
     articles = []
@@ -162,6 +165,37 @@ def _evaluate_and_writeback(kg_folder, nodes, today, *, fetch_metadata, fetch_fu
     return passed, failed
 
 
+def _persist_and_classify(scripts_dir, kg_folder, articles):
+    """Ledger-persist this run's used PMIDs, then classify evidence tiers + stamp literature."""
+    if articles:
+        batch_path = os.path.join(kg_folder, "_build_ledger_batch.json")
+        with open(batch_path, "w", encoding="utf-8") as fh:
+            json.dump(ledger_batch_for_used(articles), fh)
+        _run(os.path.join(scripts_dir, "pmid_ledger.py"), "batch-add",
+             kg_folder, "--input", batch_path)
+        os.remove(batch_path)
+    _run(os.path.join(scripts_dir, "classify_evidence_tier.py"),
+         kg_folder, "--update-ledger")
+    _run(os.path.join(scripts_dir, "stamp_literature.py"), kg_folder)
+
+
+def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None):
+    """Quarantine enforcement, index, stats, validation, embeddings (non-fatal), log."""
+    _run(os.path.join(scripts_dir, "enforce_quarantine.py"), kg_folder)
+    if overview_text is not None:
+        _run(os.path.join(scripts_dir, "generate_index.py"), kg_folder,
+             "--overview-text", overview_text)
+    else:
+        _run(os.path.join(scripts_dir, "generate_index.py"), kg_folder)
+    _run(os.path.join(scripts_dir, "update_manifest_stats.py"), kg_folder)
+    _run(os.path.join(scripts_dir, "validate_manifest.py"),
+         os.path.join(kg_folder, "manifest.json"))
+    subprocess.run([sys.executable, os.path.join(scripts_dir, "build_embeddings.py"),
+                    kg_folder], check=False)  # non-fatal
+    _run(os.path.join(scripts_dir, "append_log.py"), kg_folder,
+         "--op", op, "--summary", summary)
+
+
 def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_text,
               chat, breadth_override, today, run_subprocess=True, prompt_fn=None):
     os.makedirs(os.path.join(kg_folder, "nodes"), exist_ok=True)
@@ -198,15 +232,7 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
         json.dump(manifest, fh, indent=2)
 
     if run_subprocess:
-        batch_path = os.path.join(kg_folder, "_build_ledger_batch.json")
-        with open(batch_path, "w", encoding="utf-8") as fh:
-            json.dump(ledger_batch_for_used(articles), fh)
-        _run(os.path.join(scripts_dir, "pmid_ledger.py"), "batch-add",
-             kg_folder, "--input", batch_path)
-        os.remove(batch_path)
-        _run(os.path.join(scripts_dir, "classify_evidence_tier.py"),
-             kg_folder, "--update-ledger")
-        _run(os.path.join(scripts_dir, "stamp_literature.py"), kg_folder)
+        _persist_and_classify(scripts_dir, kg_folder, articles)
 
     # Phase 3 evaluation — reuse the Phase-2 evaluator in-process.
     passed, failed = _evaluate_and_writeback(
@@ -214,17 +240,9 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
         fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text, chat=chat)
 
     if run_subprocess:
-        _run(os.path.join(scripts_dir, "enforce_quarantine.py"), kg_folder)
-        _run(os.path.join(scripts_dir, "generate_index.py"), kg_folder,
-             "--overview-text", f"Knowledge graph on {topic}.")
-        _run(os.path.join(scripts_dir, "update_manifest_stats.py"), kg_folder)
-        _run(os.path.join(scripts_dir, "validate_manifest.py"),
-             os.path.join(kg_folder, "manifest.json"))
-        subprocess.run([sys.executable, os.path.join(scripts_dir, "build_embeddings.py"),
-                        kg_folder], check=False)  # non-fatal
-        _run(os.path.join(scripts_dir, "append_log.py"), kg_folder,
-             "--op", "build",
-             "--summary", f"Local BUILD: {len(nodes)} nodes, {passed} passed, {failed} failed.")
+        _finalize_kg(scripts_dir, kg_folder, op="build",
+                     summary=f"Local BUILD: {len(nodes)} nodes, {passed} passed, {failed} failed.",
+                     overview_text=f"Knowledge graph on {topic}.")
 
     return {"nodes": len(nodes), "passed": passed, "failed": failed, "kg_folder": kg_folder}
 
@@ -260,17 +278,18 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
 
     if run_subprocess:
         scripts_dir = os.path.dirname(os.path.abspath(__file__))
-        known = set(subprocess.run(
+        known = set(json.loads(subprocess.run(
             [sys.executable, os.path.join(scripts_dir, "pmid_ledger.py"), "query",
              kg_folder, "--pmids-only"], capture_output=True, text=True, check=True
-        ).stdout.split())
+        ).stdout))
     else:
+        scripts_dir = None
         known = {p for n in manifest["nodes"] for p in n.get("pubmed_ids", [])}
 
     sub_queries = recent_qs + gap_qs
     articles = gather_articles(sub_queries, esearch=esearch,
                                fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text,
-                               known_pmids=known, tier=tier)
+                               known_pmids=known, tier=tier, mindate=since_date)
     if prompt_fn is not None:
         print(source_report(topic, "update", breadth, sub_queries, articles))
         articles, sub_queries, _ = apply_steer(prompt_fn(), articles, sub_queries)
@@ -291,10 +310,18 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
     with open(os.path.join(kg_folder, "manifest.json"), "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2)
 
+    if run_subprocess:
+        _persist_and_classify(scripts_dir, kg_folder, articles)
+
     # Evaluate new nodes via the shared helper (reads node files written above).
     passed, failed = _evaluate_and_writeback(
         kg_folder, new_nodes, today,
         fetch_metadata=fetch_metadata, fetch_full_text=fetch_full_text, chat=chat)
+
+    new_nodes_count = len(new_nodes)
+    if run_subprocess:
+        _finalize_kg(scripts_dir, kg_folder, op="update",
+                     summary=f"Local UPDATE: {new_nodes_count} new nodes, {passed} passed, {failed} failed.")
 
     changelog = [{"id": n["id"], "title": n["title"]} for n in new_nodes]
     return {"nodes_created": [n["id"] for n in new_nodes], "passed": passed,

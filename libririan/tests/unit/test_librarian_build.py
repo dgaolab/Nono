@@ -150,6 +150,215 @@ def test_apply_steer_empty_proceeds_unchanged():
     assert kept == arts and proceed is True
 
 
+def test_gather_articles_forwards_mindate_to_esearch():
+    """gather_articles should pass mindate kwarg through to esearch when provided."""
+    received_kwargs = {}
+
+    def esearch(q, retmax=10, **kw):
+        received_kwargs[q] = kw
+        return ["1"]
+
+    def fetch_metadata(pmids):
+        return {p: {"title": f"T{p}", "abstract": f"abs{p}", "pmcid": None,
+                    "authors": [], "journal": "J", "year": "2021", "publication_types": []}
+                for p in pmids}
+
+    tier = lb.build.TIERS["narrow"]
+    lb.gather_articles(["q1"], esearch=esearch, fetch_metadata=fetch_metadata,
+                       fetch_full_text=lambda p: "", known_pmids=set(), tier=tier,
+                       mindate="2022/01/01")
+    assert received_kwargs.get("q1", {}).get("mindate") == "2022/01/01"
+
+
+def _make_integration_chat_build():
+    """Scripted chat replies for a 2-node build: plan→skeleton→2 synths→rels→2 evals."""
+    replies = iter([
+        # plan_search
+        '{"breadth": "narrow", "sub_queries": ["melatonin circadian", "melatonin sleep"]}',
+        # skeleton (2 nodes)
+        '{"nodes": ['
+        '{"title": "Circadian Entrainment", "summary": "Melatonin entrains SCN.", "pmids": ["1"]},'
+        '{"title": "Sleep Latency", "summary": "Melatonin finding 2.", "pmids": ["2"]}'
+        ']}',
+        # node 1 synthesis
+        '{"title": "Circadian Entrainment", "summary": "Melatonin entrains SCN.", "detail": "d1",'
+        '"tags": ["circadian"], "keywords": ["scn"], "entities": [], "supports": {"1": "Melatonin finding 1."}}',
+        # node 2 synthesis
+        '{"title": "Sleep Latency", "summary": "Melatonin finding 2.", "detail": "d2",'
+        '"tags": ["circadian"], "keywords": ["sleep"], "entities": [], "supports": {"2": "Melatonin finding 2."}}',
+        # relationships
+        '{"edges": []}',
+        # evaluator verdicts — supported with verbatim quote matching abstract text
+        '{"verdict": "supported", "reasoning": "ok", "quotes": [{"text": "Melatonin finding 1.", "source": "abstract"}]}',
+        '{"verdict": "supported", "reasoning": "ok", "quotes": [{"text": "Melatonin finding 2.", "source": "abstract"}]}',
+    ])
+    def chat(messages, **kw):
+        return next(replies)
+    return chat
+
+
+def test_run_build_subprocess_true_finishes_kg(tmp_path):
+    """run_build with run_subprocess=True should produce a fully-finished KG:
+    ledger with used PMIDs, classified evidence tiers, index, and valid manifest stats.
+    """
+    kg = tmp_path / "KG_Mel"
+
+    def esearch(q, retmax=10, **kw):
+        return ["1", "2"]
+
+    def fetch_metadata(pmids):
+        return {p: {
+            "title": f"T{p}",
+            "abstract": f"Melatonin finding {p}.",
+            "pmcid": None,
+            "authors": [],
+            "journal": "J",
+            "year": "2021",
+            # "Randomized Controlled Trial" → evidence_tier "rct" per PUBTYPE_MAP
+            "publication_types": ["Randomized Controlled Trial"],
+        } for p in pmids}
+
+    chat = _make_integration_chat_build()
+
+    result = lb.run_build(
+        "melatonin", str(kg), "KG_Mel",
+        esearch=esearch,
+        fetch_metadata=fetch_metadata,
+        fetch_full_text=lambda p: "",
+        chat=chat,
+        breadth_override="narrow",
+        today="2026-06-24",
+        run_subprocess=True,
+    )
+
+    # Ledger exists and contains both PMIDs as "used"
+    ledger_path = kg / "_pmid_ledger.json"
+    assert ledger_path.exists(), "_pmid_ledger.json not created"
+    ledger = json.loads(ledger_path.read_text())
+    entries = ledger.get("entries", {})
+    assert "1" in entries, "PMID 1 not in ledger"
+    assert "2" in entries, "PMID 2 not in ledger"
+    assert entries["1"]["disposition"] == "used"
+    assert entries["2"]["disposition"] == "used"
+
+    # Index was generated
+    assert (kg / "_index.md").exists(), "_index.md not generated"
+
+    # Evidence tier classified — "Randomized Controlled Trial" → "rct"
+    manifest = json.loads((kg / "manifest.json").read_text())
+    node_file = kg / "nodes" / manifest["nodes"][0]["file"]
+    from lib.frontmatter import parse as parse_fm
+    sys.path.insert(0, str(kg.parent.parent.parent / "scripts"))
+    fm, _ = parse_fm(str(node_file))
+    assert fm.get("evidence_tier") == "rct", (
+        f"Expected evidence_tier='rct', got '{fm.get('evidence_tier')}'"
+    )
+
+    # Log was appended
+    assert (kg / "_log.md").exists(), "_log.md not created"
+
+    # Manifest statistics updated
+    assert manifest["statistics"].get("total_nodes") == 2, (
+        f"Expected total_nodes=2, got {manifest['statistics']}"
+    )
+
+
+def _make_integration_chat_update():
+    """Scripted chat replies for a 1-node update (PMID 3): gap_fill→skeleton→synth→rels→eval."""
+    replies = iter([
+        # gap_fill_queries
+        '{"queries": ["melatonin review"]}',
+        # skeleton (1 new node citing pmid 3)
+        '{"nodes": [{"title": "Review Finding", "summary": "Melatonin finding 3.", "pmids": ["3"]}]}',
+        # node synthesis
+        '{"title": "Review Finding", "summary": "Melatonin finding 3.", "detail": "d3",'
+        '"tags": ["circadian"], "keywords": ["review"], "entities": [], "supports": {"3": "Melatonin finding 3."}}',
+        # relationships among new nodes
+        '{"edges": []}',
+        # evaluator verdict for node 3 / pmid 3
+        '{"verdict": "supported", "reasoning": "ok", "quotes": [{"text": "Melatonin finding 3.", "source": "abstract"}]}',
+    ])
+    def chat(messages, **kw):
+        return next(replies)
+    return chat
+
+
+def test_run_update_subprocess_true_persists_novel_pmids(tmp_path):
+    """run_update with run_subprocess=True must persist new PMIDs to ledger and
+    update manifest statistics — the C1 bug (stdout.split vs json.loads) would
+    cause PMID 3 to never be recognised as novel and the ledger would stay stale.
+    """
+    kg = tmp_path / "KG_Mel"
+
+    # ---- First: run a real build so we have a properly-finished KG ----
+    def esearch_build(q, retmax=10, **kw):
+        return ["1", "2"]
+
+    def fetch_metadata_build(pmids):
+        return {p: {
+            "title": f"T{p}",
+            "abstract": f"Melatonin finding {p}.",
+            "pmcid": None, "authors": [], "journal": "J", "year": "2021",
+            "publication_types": ["Randomized Controlled Trial"],
+        } for p in pmids}
+
+    lb.run_build(
+        "melatonin", str(kg), "KG_Mel",
+        esearch=esearch_build,
+        fetch_metadata=fetch_metadata_build,
+        fetch_full_text=lambda p: "",
+        chat=_make_integration_chat_build(),
+        breadth_override="narrow",
+        today="2026-06-24",
+        run_subprocess=True,
+    )
+
+    # ---- Now run UPDATE with PMID 3 as novel ----
+    def esearch_update(q, retmax=10, **kw):
+        return ["3"]
+
+    def fetch_metadata_update(pmids):
+        return {p: {
+            "title": f"T{p}",
+            "abstract": f"Melatonin finding {p}.",
+            "pmcid": None, "authors": [], "journal": "J", "year": "2022",
+            "publication_types": ["Review"],
+        } for p in pmids}
+
+    result = lb.run_update(
+        "melatonin", str(kg),
+        esearch=esearch_update,
+        fetch_metadata=fetch_metadata_update,
+        fetch_full_text=lambda p: "",
+        chat=_make_integration_chat_update(),
+        since_date="2021/01/01",
+        today="2026-06-25",
+        run_subprocess=True,
+    )
+
+    # PMID "3" must be in ledger as "used" (proves C1 fix + _persist_and_classify)
+    ledger = json.loads((kg / "_pmid_ledger.json").read_text())
+    entries = ledger.get("entries", {})
+    assert "3" in entries, (
+        f"PMID 3 not found in ledger entries; ledger keys: {list(entries.keys())}"
+    )
+    assert entries["3"]["disposition"] == "used"
+
+    # Manifest must have 3 nodes total
+    manifest = json.loads((kg / "manifest.json").read_text())
+    assert len(manifest["nodes"]) == 3, (
+        f"Expected 3 nodes in manifest, got {len(manifest['nodes'])}"
+    )
+
+    # Manifest statistics must reflect all 3 nodes
+    assert manifest["statistics"].get("total_nodes") == 3, (
+        f"Expected total_nodes=3, got {manifest['statistics']}"
+    )
+
+    # Index still present
+    assert (kg / "_index.md").exists(), "_index.md was removed or never regenerated"
+
+
 def test_run_build_end_to_end_writes_manifest_and_nodes(tmp_path):
     kg = tmp_path / "KG_Mel"
     def esearch(q, retmax=10, **kw):
