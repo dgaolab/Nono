@@ -163,3 +163,19 @@ def test_assemble_manifest_minimal_shape():
     n = m["nodes"][0]
     assert n["pubmed_ids"] == ["2"]            # manifest stores PMIDs as strings
     assert n["evaluation_status"] == "pending"
+
+
+def test_weak_spots_finds_under_referenced_and_failed():
+    nodes = [
+        {"id": "node_001", "pubmed_ids": ["1"], "evaluation_status": "passed"},
+        {"id": "node_002", "pubmed_ids": ["1", "2"], "evaluation_status": "passed"},
+        {"id": "node_003", "pubmed_ids": ["3", "4"], "evaluation_status": "failed"},
+    ]
+    assert set(build.weak_spots(nodes)) == {"node_001", "node_003"}
+
+
+def test_gap_fill_queries_returns_strings():
+    def chat(messages, **kw):
+        return '{"queries": ["alt term A", "MeSH B"]}'
+    out = build.gap_fill_queries("topic", ["summary one"], chat=chat, count=2)
+    assert out == ["alt term A", "MeSH B"]

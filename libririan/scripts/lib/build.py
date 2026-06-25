@@ -278,3 +278,31 @@ def assemble_manifest(kg_name, topic, breadth, sub_queries, nodes, edges, today)
         "edges": edges,
         "statistics": {},
     }
+
+
+def weak_spots(manifest_nodes):
+    out = []
+    for n in manifest_nodes:
+        if len(n.get("pubmed_ids", [])) <= 1 or \
+           n.get("evaluation_status") == "failed" or n.get("quarantined"):
+            out.append(n["id"])
+    return out
+
+
+_GAP_SYS = (
+    "Propose PubMed gap-fill queries that find DIFFERENT articles than an "
+    "original search — use synonyms, MeSH headings, alternate phrasings — to "
+    "strengthen weakly-supported knowledge nodes. Reply with ONE JSON object: "
+    "{\"queries\": [\"...\"]}."
+)
+
+
+def gap_fill_queries(topic, weak_node_summaries, *, chat, count):
+    user = (f"TOPIC: {topic}\nProduce {count} gap-fill queries for these weak nodes:\n"
+            + "\n".join(f"- {s}" for s in weak_node_summaries))
+    obj = _ask_json(chat, [{"role": "system", "content": _GAP_SYS},
+                           {"role": "user", "content": user}])
+    qs = [str(q).strip() for q in (obj.get("queries") or []) if str(q).strip()]
+    if not qs:
+        raise BuildError("no gap-fill queries produced")
+    return qs[:count]
