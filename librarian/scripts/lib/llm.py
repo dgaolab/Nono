@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""Local open-weight LLM seam — the single place nono-librarian talks to a model.
+"""LLM seam — the single place nono-librarian talks to a model.
 
-Targets any OpenAI-compatible ``/chat/completions`` endpoint (vLLM, llama.cpp,
-LM Studio, or Ollama's OpenAI shim). It uses only stdlib ``urllib``, so
-importing this module pulls in no dependency and adds nothing to the env.
+Targets any OpenAI-compatible ``/chat/completions`` endpoint. In the scheduled
+setup the local open-weight model is served by vLLM; the seam also works with
+llama.cpp, LM Studio, or Ollama's OpenAI shim. It uses only stdlib ``urllib``,
+so importing this module pulls in no dependency and adds nothing to the env.
 
-Configuration is by environment so the same code runs against whatever server
-the user happens to have up:
+There is no model discovery: the scheduling agent (Claude or the local Hermes
+agent) is already bound to a model and injects the endpoint by environment at
+launch. The same code therefore runs against whatever server it is pointed at:
 
   LLM_BASE_URL  base URL of the OpenAI-compatible server
-                (default "http://localhost:11434/v1" — Ollama's OpenAI shim)
-  LLM_MODEL     model name to request (default "qwen2.5:7b-instruct")
+                (default "http://localhost:8000/v1" — vLLM's default port)
+  LLM_MODEL     model name to request — must match vLLM's --served-model-name
+                (default "Qwen/Qwen2.5-7B-Instruct")
   LLM_API_KEY   bearer token if the server wants one (default "not-needed";
                 local servers usually ignore it)
+
+The defaults are only a fallback for an interactive session with a local vLLM
+server up; scheduled runs override all three. Do not hardcode a real
+``LLM_API_KEY`` here — the agent injects it per run.
 
 `chat` returns the assistant message text, or raises `LLMUnavailable` on any
 connection / HTTP / parse failure. Callers are expected to catch that and
@@ -25,8 +32,8 @@ import os
 import urllib.error
 import urllib.request
 
-DEFAULT_BASE_URL = "http://localhost:11434/v1"
-DEFAULT_MODEL = "qwen2.5:7b-instruct"
+DEFAULT_BASE_URL = "http://localhost:8000/v1"
+DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 
 
 class LLMUnavailable(RuntimeError):

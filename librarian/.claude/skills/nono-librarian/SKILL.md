@@ -48,18 +48,44 @@ will silently degrade semantic search to lexical-only.
 `onnxruntime`), `PyYAML`, `jsonschema`, `pytest`. No Anthropic / Claude
 packages are involved.
 
-## Step 2 — Reach the local model only when reasoning is needed
+## Step 2 — In-loop reasoning: the scheduling agent supplies the model
 
-LLM reasoning goes through one seam, `scripts/lib/llm.py`, which targets any
-**OpenAI-compatible** `/chat/completions` server (vLLM, llama.cpp, LM Studio,
-Ollama's OpenAI shim) using stdlib `urllib` — no extra dependency. Configure it
-by environment:
+This skill is invoked **on a schedule by an agent that is already bound to a
+model** (Claude, or the local Hermes agent). So there is **no model discovery
+here** — the skill never probes for or "finds" a running model. It just uses the
+endpoint the launching agent hands it.
 
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `LLM_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible server base URL |
-| `LLM_MODEL` | `qwen2.5:7b-instruct` | model name to request |
+The subtlety: the batch scripts (`librarian_build.py`, `librarian_evaluate.py`)
+make their reasoning calls *programmatically, in a loop*, from inside a Python
+**subprocess**. That subprocess cannot call back into the agent's live session,
+so it makes its own calls to an **OpenAI-compatible** `/chat/completions`
+endpoint through one seam, `scripts/lib/llm.py` (stdlib `urllib`, no extra
+dependency). The scheduling agent points that seam at *its own* model by
+**injecting three env vars at launch** — this is how "either Claude or Hermes"
+is handled without baking a constant into the skill:
+
+| Variable | Default (if the agent injects nothing) | Meaning |
+|----------|----------------------------------------|---------|
+| `LLM_BASE_URL` | `http://localhost:8000/v1` | OpenAI-compatible server base URL (vLLM default port) |
+| `LLM_MODEL` | `Qwen/Qwen2.5-7B-Instruct` | model to request — must match vLLM's `--served-model-name` |
 | `LLM_API_KEY` | `not-needed` | bearer token if the server wants one |
+
+- **Hermes — local open-weight model served by vLLM.** vLLM exposes an
+  OpenAI-compatible `/chat/completions` server, so pointing `LLM_BASE_URL` at it
+  and setting `LLM_MODEL` to whatever name vLLM was launched with
+  (`--served-model-name`) is all that's needed. This is the cheap, on-brand path
+  the `nono` env was built for.
+- **Claude** can drive the loop too, but only via an OpenAI-compatible
+  `/chat/completions` surface (the Anthropic native API is `/v1/messages`, which
+  `lib/llm.py` does **not** speak), and it reintroduces per-call API cost. Prefer
+  the local vLLM model for in-loop reasoning unless quality on a specific graph
+  justifies the spend.
+
+Do **not** hardcode these values (especially `LLM_API_KEY`) into the skill or
+repo — the scheduling agent owns them and injects them per run, so they land in
+the run record and stay out of version control. The defaults above are only a
+fallback for an interactive `conda activate nono` session with a local vLLM
+server up.
 
 `llm.chat(messages)` returns the reply text or raises `LLMUnavailable`. Treat
 that exception as a signal to **degrade gracefully** — e.g. return the ranked
