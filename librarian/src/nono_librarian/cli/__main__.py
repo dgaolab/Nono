@@ -15,7 +15,6 @@ COMMANDS = {
     "cross-index": "build_cross_indices",
     "preflight": "preflight",
     "cost-report": "cost_report",
-    "evaluate": "librarian_evaluate",  # replaced by 'verify' in Phase 3
 }
 
 
