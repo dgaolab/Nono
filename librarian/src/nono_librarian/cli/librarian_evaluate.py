@@ -33,7 +33,11 @@ import os
 import subprocess
 import sys
 
-from nono_librarian.lib import evaluate, llm, pubmed
+from nono_librarian.lib import evaluate, pubmed
+try:
+    from nono_librarian.lib import llm
+except ImportError:
+    llm = None  # type: ignore[assignment]  # removed in Task 2; main() is rewritten in Task 3
 from nono_librarian.lib.frontmatter import parse as parse_node
 
 
@@ -78,9 +82,26 @@ def evaluate_node(node_id, frontmatter, *, fetch_metadata, fetch_full_text, chat
             except pubmed.PubMedUnavailable:
                 full_text = ""  # degrade to abstract-only; PMC is optional here
         source_text = build_source_text(meta, full_text)
-        result = evaluate.verify_pmid(
-            claim, article_title=meta["title"], source_text=source_text,
-            chat=chat, attempts=attempts)
+        # Call the injected chat and pass the verdict dict through the guardrail.
+        # This replaces the removed evaluate.verify_pmid; the CLI is rewritten in Task 3.
+        import json as _json
+        last_err = None
+        result = None
+        for _ in range(max(1, attempts)):
+            reply = chat([
+                {"role": "system", "content": "Reply with a JSON object: "
+                 '{"verdict": "supported|partially_supported|not_supported|unrelated", '
+                 '"reasoning": "...", "quotes": [{"text": "...", "source": "abstract"}]}'},
+                {"role": "user", "content": f"CLAIM: {claim}\n\nARTICLE TEXT:\n{source_text}"},
+            ], temperature=0.0)
+            try:
+                obj = _json.loads(reply[reply.find("{"):reply.rfind("}") + 1]) if "{" in reply else {}
+                result = evaluate.judge_pmid(obj, source_text=source_text)
+                break
+            except (evaluate.EvaluationError, ValueError, _json.JSONDecodeError) as e:
+                last_err = e
+        if result is None:
+            raise evaluate.EvaluationError(f"model never returned a valid verdict: {last_err}")
         checks.append({
             "pmid": pmid, "exists": True, "article_title": meta["title"],
             "verdict": result["verdict"], "reasoning": result["reasoning"],

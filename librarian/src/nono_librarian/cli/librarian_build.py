@@ -19,7 +19,11 @@ import os
 import subprocess
 import sys
 
-from nono_librarian.lib import build, llm, pubmed
+from nono_librarian.lib import build, pubmed
+try:
+    from nono_librarian.lib import llm
+except ImportError:
+    llm = None  # type: ignore[assignment]  # removed in Task 2; main() is rewritten in Task 3
 from nono_librarian.lib.frontmatter import parse as parse_node, write as write_node
 
 
