@@ -67,6 +67,9 @@ test -d "$NONO_HOME/.venv" || uv venv "$NONO_HOME/.venv" --python 3.14
 test -d "$NONO_HOME/librarian" || git clone git@github.com:dgaolab/Nono.git "$NONO_HOME/librarian"
 # 3. install the toolkit (editable) + deps into the shared venv
 uv pip install --python "$NONO_HOME/.venv" -e "$NONO_HOME/librarian"
+# 4. make the skill globally available via a symlink to the repo (single source of truth)
+mkdir -p "$HOME/.claude/skills"
+ln -sfn "$NONO_HOME/librarian/.claude/skills/nono-librarian" "$HOME/.claude/skills/nono-librarian"
 ```
 
 Python 3.14 is pinned because it is the newest the embedding runtime
@@ -79,8 +82,8 @@ the venv is outside the repo, but we keep ignoring stray local venvs).
 Add `pyproject.toml` defining the distribution `nono-librarian` with package
 `nono_librarian` in a `src/` layout. Dependencies move from `requirements.txt`
 into `pyproject.toml` (`fastembed`, `PyYAML`, `jsonschema`; `pytest` as a dev
-extra). `requirements.txt` is kept as a thin pointer (`-e .`) or removed —
-decided in the plan.
+extra). **`requirements.txt` is removed** — `pyproject.toml` is the single
+dependency source, and bootstrap installs via `uv pip install -e .`.
 
 **Module restructure (file moves, imports updated):**
 
@@ -213,10 +216,12 @@ with `source` ∈ {abstract, full_text}), and relationship hints
   entity-ID normalization, and `--source` materials remain unimplemented. Quality
   now tracks **whichever agent runs it** rather than a fixed local model.
 
-The stale global copy at `~/.claude/skills/nono-librarian/SKILL.md` is reconciled
-to the new content (single source of truth: the repo's
-`.claude/skills/nono-librarian/SKILL.md`, mirrored to the global location, or the
-global copy replaced by a pointer — decided in the plan).
+**Single source of truth:** the repo's `.claude/skills/nono-librarian/`. The
+stale global copy at `~/.claude/skills/nono-librarian/` is **replaced by a
+symlink** to the repo's skill directory
+(`ln -sfn "$NONO_HOME/librarian/.claude/skills/nono-librarian" ~/.claude/skills/nono-librarian`),
+so the globally-available skill and the repo never drift. This symlink step is
+part of the §3 bootstrap.
 
 ## 9. Tests
 
@@ -257,4 +262,5 @@ global copy replaced by a pointer — decided in the plan).
 - **Added:** `pyproject.toml`, `src/` package layout + `nono` CLI dispatcher,
   `cli/gather.py`, `cli/assemble.py`, `cli/finalize.py`, `cli/verify.py`,
   `schemas/nodes_input_schema.json`, new tests.
-- **Rewritten:** `SKILL.md` (both copies reconciled).
+- **Rewritten:** `SKILL.md` (repo copy; global location symlinked to it).
+- **Removed:** `requirements.txt` (deps now in `pyproject.toml`).
