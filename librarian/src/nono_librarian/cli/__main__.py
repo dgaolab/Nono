@@ -18,6 +18,7 @@ COMMANDS = {
     "preflight": "preflight",
     "cost-report": "cost_report",
     "verify": "verify",
+    "finalize": "finalize",
 }
 
 
