@@ -4,6 +4,7 @@ import sys
 
 # subcommand -> module under nono_librarian.cli
 COMMANDS = {
+    "gather": "gather",
     "search": "search_nodes",
     "lint": "linter_kg",
     "retractions": "check_retractions",
