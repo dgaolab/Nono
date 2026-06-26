@@ -36,7 +36,7 @@
     },
     "search_profile": {
       "type": "object",
-      "description": "Persisted PubMed sub-queries — consumed by scripts/preflight.py and reused by UPDATE-mode Recent-track searches",
+      "description": "Persisted PubMed sub-queries — consumed by the preflight step and reused by UPDATE-mode Recent-track searches",
       "required": ["breadth", "sub_queries"],
       "properties": {
         "breadth": {
