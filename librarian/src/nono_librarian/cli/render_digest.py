@@ -183,8 +183,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from append_log import append_entry
+from nono_librarian.cli.append_log import append_entry
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_COST_LOG = os.path.join(REPO_ROOT, "_cost_log.jsonl")
@@ -265,13 +264,13 @@ def generate(kg_folder: str, run_record_path: str,
     return digest_path
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Render a KG run digest.")
     parser.add_argument("kg_folder", help="Path to the KG folder")
     parser.add_argument("--run-record", required=True, help="Path to runs/<run_id>.json")
     parser.add_argument("--cost-log", default=DEFAULT_COST_LOG, help="Path to _cost_log.jsonl")
     parser.add_argument("--no-log", action="store_true", help="Do not append a digest entry to _log.md")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         path = generate(args.kg_folder, args.run_record, args.cost_log, do_log=not args.no_log)
     except Exception as e:          # digest must never fail the run

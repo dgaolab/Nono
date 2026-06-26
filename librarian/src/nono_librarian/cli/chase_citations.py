@@ -28,11 +28,10 @@ import time
 import urllib.parse
 import urllib.request
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from check_retractions import collect_used_pmids
-from preflight import load_known_pmids
-from append_log import append_entry
+from nono_librarian.cli.check_retractions import collect_used_pmids
+from nono_librarian.cli.preflight import load_known_pmids
+from nono_librarian.cli.append_log import append_entry
 
 EUTILS_ELINK = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi"
 ICITE_API = "https://icite.od.nih.gov/api/pubs"
@@ -123,7 +122,7 @@ def rank_candidates(candidates: dict, rcr_map: dict, min_cocitation: int, top_n:
     return rows[:top_n]
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Deterministic citation-chasing discovery feed.")
     parser.add_argument("kg_folder", help="Path to the KG folder")
     parser.add_argument("--min-cocitation", type=int, default=2,
@@ -135,7 +134,7 @@ def main():
     parser.add_argument("--icite-fixture", default=None,
                         help='JSON {"pmid": rcr} replacing live iCite (tests)')
     parser.add_argument("--json", action="store_true", help="Emit the structured feed as JSON")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     seeds = collect_used_pmids(args.kg_folder)
     api_key = os.environ.get("NCBI_API_KEY")

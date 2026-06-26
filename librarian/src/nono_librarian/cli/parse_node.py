@@ -16,8 +16,7 @@ import json
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse
+from nono_librarian.lib.frontmatter import parse
 
 
 def _resolve_field(obj, dotted_path: str):

@@ -24,8 +24,10 @@ import os
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse as parse_node
+from nono_librarian.lib.frontmatter import parse as parse_node
+from nono_librarian.paths import data_file
+
+DEFAULT_LEDGER_SCHEMA = data_file("schemas", "pmid_ledger_schema.json")
 
 
 # ---------------------------------------------------------------------------
@@ -57,13 +59,6 @@ def _today_iso() -> str:
     return datetime.date.today().isoformat()
 
 
-def _find_project_root() -> str:
-    d = os.path.dirname(os.path.abspath(__file__))
-    for _ in range(10):
-        if os.path.isdir(os.path.join(d, "schemas")):
-            return d
-        d = os.path.dirname(d)
-    return os.path.dirname(os.path.abspath(__file__))
 
 
 def _ledger_path(kg_folder: str) -> str:
@@ -509,10 +504,7 @@ def cmd_validate(args):
         ledger = json.load(fh)
 
     # Schema validation
-    schema_path = args.schema
-    if not schema_path:
-        project_root = _find_project_root()
-        schema_path = os.path.join(project_root, "schemas", "pmid_ledger_schema.json")
+    schema_path = args.schema or str(DEFAULT_LEDGER_SCHEMA)
 
     if not os.path.exists(schema_path):
         print(f"Error: schema not found at {schema_path}", file=sys.stderr)
@@ -576,7 +568,7 @@ def cmd_validate(args):
 # CLI
 # ---------------------------------------------------------------------------
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Persistent PMID ledger for KG build/update cycles.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -640,7 +632,7 @@ def main():
     p_validate.add_argument("kg_folder")
     p_validate.add_argument("--schema", help="Path to ledger JSON Schema file")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     commands = {
         "init": cmd_init,
         "add": cmd_add,

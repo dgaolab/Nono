@@ -15,8 +15,7 @@ import os
 import re
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse, write, serialize
+from nono_librarian.lib.frontmatter import parse, write, serialize
 
 
 def _sanitize_mermaid_label(title, max_len=40):
@@ -149,14 +148,14 @@ def _build_mermaid_category(active_nodes, active_edges, node_titles, categories)
     return "\n\n".join(parts)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Generate _index.md from manifest.json")
     parser.add_argument("kg_folder", help="Path to the KG folder")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print generated content to stdout instead of writing")
     parser.add_argument("--overview-text", default=None,
                         help="Overview text to use (overrides preserved text)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     kg_folder = args.kg_folder
     manifest_path = os.path.join(kg_folder, "manifest.json")

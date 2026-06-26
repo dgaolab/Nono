@@ -186,7 +186,7 @@ def run_summary(log_file: str, last_n: int) -> int:
     return 0
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Token/cost accounting from Claude Code transcripts.")
     parser.add_argument("transcript", nargs="?", default=None,
@@ -203,7 +203,7 @@ def main():
                         help=f"Cost log path (default {DEFAULT_LOG})")
     parser.add_argument("--price-file", default=None,
                         help="JSON file overriding the built-in price table")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     prices = PRICES
     if args.price_file:

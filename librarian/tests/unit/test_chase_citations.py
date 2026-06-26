@@ -3,10 +3,7 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-import chase_citations
-
-SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "chase_citations.py"))
+from nono_librarian.cli import chase_citations
 
 
 def _write_ledger(kg, entries):
@@ -53,7 +50,7 @@ def test_cli_discovery_with_fixture(tmp_path):
     fixture = tmp_path / "elink.json"
     fixture.write_text(json.dumps({"111": ["aaa", "old"], "222": ["aaa", "bbb"]}), encoding="utf-8")
     # --min-cocitation 1 keeps the single-reference candidate 'bbb' once Task 3 adds default-2 bounding
-    res = subprocess.run([sys.executable, SCRIPT, str(kg), "--min-cocitation", "1",
+    res = subprocess.run([sys.executable, "-m", "nono_librarian.cli.chase_citations", str(kg), "--min-cocitation", "1",
                           "--elink-fixture", str(fixture), "--json"],
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
@@ -118,7 +115,7 @@ def test_cli_feed_has_rcr_and_icite_status(tmp_path):
     elink.write_text(json.dumps({"111": ["aaa", "bbb"], "222": ["aaa"]}), encoding="utf-8")
     icite = tmp_path / "icite.json"
     icite.write_text(json.dumps({"aaa": 7.0}), encoding="utf-8")
-    res = subprocess.run([sys.executable, SCRIPT, str(kg), "--min-cocitation", "1", "--top-n", "5",
+    res = subprocess.run([sys.executable, "-m", "nono_librarian.cli.chase_citations", str(kg), "--min-cocitation", "1", "--top-n", "5",
                           "--elink-fixture", str(elink), "--icite-fixture", str(icite), "--json"],
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr

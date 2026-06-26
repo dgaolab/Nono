@@ -2,8 +2,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-from linter_kg import KGLinter
+from nono_librarian.cli.linter_kg import KGLinter
 
 
 def _write_kg(tmp_path, node_frontmatter_blocks):

@@ -33,9 +33,8 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import evaluate, llm, pubmed
-from lib.frontmatter import parse as parse_node
+from nono_librarian.lib import evaluate, llm, pubmed
+from nono_librarian.lib.frontmatter import parse as parse_node
 
 
 def build_source_text(meta, full_text):
@@ -148,7 +147,6 @@ def main(argv=None):
 
     only_ids = set(args.nodes.split(",")) if args.nodes else None
     node_files = _node_files(args.kg_folder, only_ids)
-    scripts_dir = os.path.dirname(os.path.abspath(__file__))
 
     entries = []
     try:
@@ -174,11 +172,11 @@ def main(argv=None):
         upd_path = os.path.join(args.kg_folder, f"_eval_upd_{entry['node_id']}.json")
         with open(upd_path, "w", encoding="utf-8") as fh:
             json.dump(updates, fh)
-        subprocess.run([sys.executable, os.path.join(scripts_dir, "update_frontmatter.py"),
+        subprocess.run([sys.executable, "-m", "nono_librarian.cli.update_frontmatter",
                         node_files[entry["node_id"]], "--updates-file", upd_path], check=True)
         os.remove(upd_path)
 
-    subprocess.run([sys.executable, os.path.join(scripts_dir, "update_manifest_stats.py"),
+    subprocess.run([sys.executable, "-m", "nono_librarian.cli.update_manifest_stats",
                     args.kg_folder], check=True)
 
     passed = sum(1 for e in entries if e["overall_status"] == "passed")

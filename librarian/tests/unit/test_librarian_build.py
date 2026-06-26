@@ -3,8 +3,7 @@ import os
 import sys
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-import librarian_build as lb
+from nono_librarian.cli import librarian_build as lb
 
 _ARTS = [
     {"pmid": "1", "title": "Melatonin and clock genes", "abstract": "Melatonin entrains the SCN."},
@@ -45,8 +44,8 @@ def test_build_run_record_orders_pmids_numerically():
 
 def test_build_run_record_validates_against_schema():
     jsonschema = pytest.importorskip("jsonschema")
-    schema_path = os.path.join(os.path.dirname(__file__), "..", "..", "schemas",
-                               "run_record_schema.json")
+    from nono_librarian.paths import data_file
+    schema_path = str(data_file("schemas", "run_record_schema.json"))
     with open(schema_path, encoding="utf-8") as fh:
         schema = json.load(fh)
     rr = lb.build_run_record(
@@ -293,8 +292,7 @@ def test_run_build_subprocess_true_finishes_kg(tmp_path):
     # Evidence tier classified — "Randomized Controlled Trial" → "rct"
     manifest = json.loads((kg / "manifest.json").read_text())
     node_file = kg / manifest["nodes"][0]["file"]   # file is kg-root-relative (nodes/...)
-    from lib.frontmatter import parse as parse_fm
-    sys.path.insert(0, str(kg.parent.parent.parent / "scripts"))
+    from nono_librarian.lib.frontmatter import parse as parse_fm
     fm, _ = parse_fm(str(node_file))
     assert fm.get("evidence_tier") == "rct", (
         f"Expected evidence_tier='rct', got '{fm.get('evidence_tier')}'"

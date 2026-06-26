@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 _cost_log.jsonl
 _embeddings.json
+
+# Dev venvs
+.venv-dev/
+.venv/
+src/nono_librarian.egg-info/

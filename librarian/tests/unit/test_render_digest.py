@@ -1,8 +1,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-from render_digest import render
+from nono_librarian.cli.render_digest import render
 
 
 def update_record():
@@ -120,7 +119,7 @@ def _make_kg(tmp_path, run_record, eval_log, manifest_stats, manifest_nodes):
 
 
 def test_generate_writes_digest_and_pointer(tmp_path):
-    from render_digest import generate
+    from nono_librarian.cli.render_digest import generate
     nodes = [{"id": "node_016", "title": "New concept"}, {"id": "node_003", "title": "Existing concept"}]
     kg, rr = _make_kg(tmp_path, update_record(),
                       list(eval_index().values()), stats(), nodes)
@@ -135,7 +134,7 @@ def test_generate_writes_digest_and_pointer(tmp_path):
 
 
 def test_load_cost_statuses(tmp_path):
-    from render_digest import load_cost
+    from nono_librarian.cli.render_digest import load_cost
     missing = tmp_path / "nope.jsonl"
     assert load_cost(str(missing), "abc")["status"] == "unavailable"
     log = tmp_path / "_cost_log.jsonl"
@@ -147,8 +146,8 @@ def test_load_cost_statuses(tmp_path):
 
 
 def test_generate_survives_logging_failure(tmp_path, monkeypatch):
-    import render_digest
-    from render_digest import generate
+    import nono_librarian.cli.render_digest as render_digest
+    from nono_librarian.cli.render_digest import generate
     nodes = [{"id": "node_016", "title": "New concept"}, {"id": "node_003", "title": "Existing concept"}]
     kg, rr = _make_kg(tmp_path, update_record(), list(eval_index().values()), stats(), nodes)
     def boom(*a, **k):

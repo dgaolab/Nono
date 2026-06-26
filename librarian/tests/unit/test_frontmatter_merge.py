@@ -1,8 +1,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-from lib.frontmatter import deep_merge
+from nono_librarian.lib.frontmatter import deep_merge
 
 
 def _base_node():

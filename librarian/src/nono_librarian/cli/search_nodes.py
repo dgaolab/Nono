@@ -25,8 +25,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import embeddings
+from nono_librarian.lib import embeddings
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +283,7 @@ def load_embedding_index(kg_folder):
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Rank KG manifest nodes by relevance to a query.")
     parser.add_argument("query", help="Free-text question or search query")
@@ -306,7 +305,7 @@ def main():
                         help="Disable embedding-based semantic scoring (lexical only)")
     parser.add_argument("--query-embedding-fixture", dest="query_embedding_fixture", default=None,
                         help="JSON file with a precomputed query vector (list[float]); test seam")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     min_tier_rank = EVIDENCE_TIER_ORDER.get(args.evidence_min, -1) if args.evidence_min else -1
 

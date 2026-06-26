@@ -17,8 +17,7 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse, write
+from nono_librarian.lib.frontmatter import parse, write
 
 
 def main():

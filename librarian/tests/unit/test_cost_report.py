@@ -15,7 +15,7 @@ EXPECTED_COST = 0.014125 + 0.001
 
 def test_direct_mode_sums_dedups_and_prices():
     result = subprocess.run(
-        [sys.executable, "scripts/cost_report.py", FIXTURE, "--session-id", "sess-1"],
+        [sys.executable, "-m", "nono_librarian.cli.cost_report", FIXTURE, "--session-id", "sess-1"],
         cwd=PROJECT_ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     entry = json.loads(result.stdout)
@@ -33,7 +33,7 @@ def test_hook_mode_appends_to_log_and_never_fails(tmp_path):
     payload = json.dumps({"session_id": "sess-1", "transcript_path": FIXTURE,
                           "hook_event_name": "Stop"})
     result = subprocess.run(
-        [sys.executable, "scripts/cost_report.py", "--hook",
+        [sys.executable, "-m", "nono_librarian.cli.cost_report", "--hook",
          "--log-file", str(log_file)],
         cwd=PROJECT_ROOT, input=payload, capture_output=True, text=True)
     assert result.returncode == 0
@@ -43,7 +43,7 @@ def test_hook_mode_appends_to_log_and_never_fails(tmp_path):
 
     # garbage stdin must not break the hook
     result = subprocess.run(
-        [sys.executable, "scripts/cost_report.py", "--hook",
+        [sys.executable, "-m", "nono_librarian.cli.cost_report", "--hook",
          "--log-file", str(log_file)],
         cwd=PROJECT_ROOT, input="not json", capture_output=True, text=True)
     assert result.returncode == 0
@@ -57,7 +57,7 @@ def test_summary_mode_takes_last_entry_per_session(tmp_path):
         json.dumps({"session_id": "s1", "ts": "2026-06-09T11:00:00Z",
                     "models": {}, "est_cost_usd": 2.5}) + "\n")
     result = subprocess.run(
-        [sys.executable, "scripts/cost_report.py", "--summary",
+        [sys.executable, "-m", "nono_librarian.cli.cost_report", "--summary",
          "--log-file", str(log_file)],
         cwd=PROJECT_ROOT, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -72,7 +72,7 @@ def test_unknown_model_is_flagged_not_priced(tmp_path):
          "message": {"id": "m1", "model": "future-model-9",
                      "usage": {"input_tokens": 10, "output_tokens": 10}}}) + "\n")
     result = subprocess.run(
-        [sys.executable, "scripts/cost_report.py", str(transcript)],
+        [sys.executable, "-m", "nono_librarian.cli.cost_report", str(transcript)],
         cwd=PROJECT_ROOT, capture_output=True, text=True)
     entry = json.loads(result.stdout)
     assert entry["est_cost_usd"] == 0

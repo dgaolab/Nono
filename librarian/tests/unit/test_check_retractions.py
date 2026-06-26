@@ -3,10 +3,7 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-import check_retractions
-
-SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "check_retractions.py"))
+from nono_librarian.cli import check_retractions
 
 
 def _write_ledger(kg, entries):
@@ -50,7 +47,7 @@ def test_cli_detection_with_fixture(tmp_path):
     })
     fixture = tmp_path / "retracted.json"
     fixture.write_text(json.dumps({"retracted": ["999"]}), encoding="utf-8")
-    res = subprocess.run([sys.executable, SCRIPT, str(kg), "--esearch-fixture", str(fixture), "--json"],
+    res = subprocess.run([sys.executable, "-m", "nono_librarian.cli.check_retractions", str(kg), "--esearch-fixture", str(fixture), "--json"],
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     out = json.loads(res.stdout)
@@ -58,7 +55,7 @@ def test_cli_detection_with_fixture(tmp_path):
     assert out["checked_count"] == 2
 
 
-from lib.frontmatter import parse as parse_node
+from nono_librarian.lib.frontmatter import parse as parse_node
 
 
 def _node(kg, nid, pmids, eval_status="passed", external=0):
@@ -100,7 +97,7 @@ def _full_kg(tmp_path):
 def _run_sweep(kg, retracted_pmids, tmp_path):
     fixture = tmp_path / "r.json"
     fixture.write_text(json.dumps({"retracted": retracted_pmids}), encoding="utf-8")
-    return subprocess.run([sys.executable, SCRIPT, str(kg), "--esearch-fixture", str(fixture), "--json"],
+    return subprocess.run([sys.executable, "-m", "nono_librarian.cli.check_retractions", str(kg), "--esearch-fixture", str(fixture), "--json"],
                           capture_output=True, text=True)
 
 
@@ -148,7 +145,7 @@ def test_malformed_fixture_exits_nonzero_no_mutation(tmp_path):
     before = (kg / "_pmid_ledger.json").read_text()
     fixture = tmp_path / "bad.json"
     fixture.write_text("{not json", encoding="utf-8")
-    res = subprocess.run([sys.executable, SCRIPT, str(kg), "--esearch-fixture", str(fixture), "--json"],
+    res = subprocess.run([sys.executable, "-m", "nono_librarian.cli.check_retractions", str(kg), "--esearch-fixture", str(fixture), "--json"],
                          capture_output=True, text=True)
     assert res.returncode != 0
     assert (kg / "_pmid_ledger.json").read_text() == before   # untouched

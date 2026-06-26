@@ -3,9 +3,8 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-import librarian_evaluate as le
-from lib import pubmed
+from nono_librarian.cli import librarian_evaluate as le
+from nono_librarian.lib import pubmed
 
 
 _ABSTRACT = "Patients on drug X showed a 40.2% response rate at 12 weeks."

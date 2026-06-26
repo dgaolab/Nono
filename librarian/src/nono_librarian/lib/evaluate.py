@@ -39,7 +39,7 @@ class EvaluationError(RuntimeError):
 
 def parse_response(text):
     """Parse a model reply into ``{verdict, reasoning, quotes}`` or raise."""
-    from lib import llm
+    from nono_librarian.lib import llm
     try:
         obj = llm.extract_json_object(text)
     except ValueError as e:

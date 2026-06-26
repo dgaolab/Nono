@@ -27,8 +27,7 @@ import urllib.parse
 import urllib.request
 from datetime import date
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from append_log import append_entry
+from nono_librarian.cli.append_log import append_entry
 
 EUTILS_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 # Mirrors the per-tier max_results table in build-kg.md Phase 1b Step 0.
@@ -76,7 +75,7 @@ def esearch(query: str, since: str, retmax: int, api_key: str | None) -> dict:
             "idlist": [str(p) for p in result.get("idlist", [])]}
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Deterministic preflight check for scheduled KG updates.")
     parser.add_argument("kg_folder", help="Path to the KG folder")
@@ -91,7 +90,7 @@ def main():
     parser.add_argument("--esearch-fixture", default=None,
                         help="JSON file mapping query -> {count, idlist}; replaces "
                              "live E-utilities calls (used by tests)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     manifest_path = os.path.join(args.kg_folder, "manifest.json")
     if not os.path.exists(manifest_path):

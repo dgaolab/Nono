@@ -24,13 +24,12 @@ import time
 import urllib.parse
 import urllib.request
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import datetime
 import subprocess
 
-from lib.frontmatter import parse as parse_node, write as write_node
-from append_log import append_entry
+from nono_librarian.lib.frontmatter import parse as parse_node, write as write_node
+from nono_librarian.cli.append_log import append_entry
 
 EUTILS_ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 CHUNK_SIZE = 200
@@ -170,13 +169,13 @@ def apply_retractions(kg_folder: str, retracted: set[str], swept: list[str]) -> 
     return summary
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Deterministic retraction sweep for a KG.")
     parser.add_argument("kg_folder", help="Path to the KG folder")
     parser.add_argument("--esearch-fixture", default=None,
                         help='JSON {"retracted": [pmid,...]} replacing live E-utilities (tests)')
     parser.add_argument("--json", action="store_true", help="Emit the structured summary as JSON")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     used = collect_used_pmids(args.kg_folder)
     api_key = os.environ.get("NCBI_API_KEY")

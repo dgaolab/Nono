@@ -18,17 +18,16 @@ import os
 import sys
 from collections import defaultdict
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse
+from nono_librarian.lib.frontmatter import parse
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Build cross-reference indices for KG linking.")
     parser.add_argument("kg_folders", nargs="+", help="Paths to KG folders (2 or more)")
     parser.add_argument("--include-quarantined", dest="include_quarantined",
                         action="store_true",
                         help="Include quarantined nodes in cross-reference indices")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if len(args.kg_folders) < 2:
         print("Error: need at least 2 KG folders", file=sys.stderr)

@@ -22,8 +22,7 @@ import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse
+from nono_librarian.lib.frontmatter import parse
 
 
 # ---------------------------------------------------------------------------
@@ -815,7 +814,7 @@ class KGLinter:
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Structural health checks for a KG.")
     parser.add_argument("kg_folder", help="Path to the KG folder")
     parser.add_argument("--severity", choices=["error", "warning", "info"],
@@ -827,7 +826,7 @@ def main():
                         help="Auto-fix simple issues (stats, ledger drift)")
     parser.add_argument("--summary-only", action="store_true",
                         help="Omit individual findings, return only summary and semantic candidates")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     min_severity = SEVERITY_RANK[args.severity]
     checks = args.checks.split(",") if args.checks else None

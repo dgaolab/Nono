@@ -24,8 +24,7 @@ import json
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse, serialize, write, deep_merge
+from nono_librarian.lib.frontmatter import parse, serialize, write, deep_merge
 
 
 def main():

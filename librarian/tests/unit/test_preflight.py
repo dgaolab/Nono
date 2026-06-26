@@ -38,7 +38,7 @@ def make_kg(tmp_path, *, with_profile=True, known_pmids=(), schedule=None):
 
 def run_preflight(kg, *extra):
     return subprocess.run(
-        [sys.executable, "scripts/preflight.py", str(kg),
+        [sys.executable, "-m", "nono_librarian.cli.preflight", str(kg),
          "--esearch-fixture", FIXTURE, *extra],
         cwd=PROJECT_ROOT, capture_output=True, text=True)
 

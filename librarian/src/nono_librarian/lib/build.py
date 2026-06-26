@@ -9,7 +9,7 @@ file writes — these functions only reason and return validated data.
 
 import re
 
-from lib import llm
+from nono_librarian.lib import llm
 
 TIERS = {
     "narrow": {"sub_queries": 3, "max_results": 10, "metadata": 15,

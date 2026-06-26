@@ -13,8 +13,7 @@ import os
 import re
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib.frontmatter import parse, write
+from nono_librarian.lib.frontmatter import parse, write
 
 SECTION_RE = re.compile(r"^### Literature\s*$", re.MULTILINE)
 NEXT_HEADING_RE = re.compile(r"^#{1,3} ", re.MULTILINE)

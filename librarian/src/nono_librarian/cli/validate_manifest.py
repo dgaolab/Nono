@@ -14,15 +14,9 @@ import json
 import os
 import sys
 
+from nono_librarian.paths import data_file
 
-def _find_project_root() -> str:
-    """Walk up from this script to find the project root (contains schemas/)."""
-    d = os.path.dirname(os.path.abspath(__file__))
-    for _ in range(10):
-        if os.path.isdir(os.path.join(d, "schemas")):
-            return d
-        d = os.path.dirname(d)
-    return os.path.dirname(os.path.abspath(__file__))
+DEFAULT_SCHEMA = data_file("schemas", "graph_schema.json")
 
 
 def _soft_checks(manifest: dict, manifest_path: str):
@@ -85,11 +79,11 @@ def _soft_checks(manifest: dict, manifest_path: str):
     return warnings
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Validate manifest.json against schema.")
     parser.add_argument("manifest_path", help="Path to manifest.json")
     parser.add_argument("--schema", help="Path to JSON Schema file (default: schemas/graph_schema.json)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Try to import jsonschema
     try:
@@ -112,10 +106,7 @@ def main():
         sys.exit(1)
 
     # Load schema
-    schema_path = args.schema
-    if not schema_path:
-        project_root = _find_project_root()
-        schema_path = os.path.join(project_root, "schemas", "graph_schema.json")
+    schema_path = args.schema or str(DEFAULT_SCHEMA)
 
     if not os.path.exists(schema_path):
         print(f"Error: schema not found: {schema_path}", file=sys.stderr)

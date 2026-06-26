@@ -27,17 +27,7 @@ import subprocess
 import sys
 
 
-def _find_project_root() -> str:
-    """Walk up from this script to find the project root (contains schemas/)."""
-    d = os.path.dirname(os.path.abspath(__file__))
-    for _ in range(10):
-        if os.path.isdir(os.path.join(d, "schemas")):
-            return d
-        d = os.path.dirname(d)
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-PROJECT_ROOT = _find_project_root()
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 class CheckResult:
@@ -85,12 +75,11 @@ def check_required_files(kg_folder: str, expected: dict) -> list[CheckResult]:
 
 
 def check_manifest_schema(kg_folder: str) -> CheckResult:
-    """Delegate to validate_manifest.py."""
+    """Delegate to validate_manifest."""
     manifest_path = os.path.join(kg_folder, "manifest.json")
-    script = os.path.join(PROJECT_ROOT, "scripts", "validate_manifest.py")
     try:
         result = subprocess.run(
-            [sys.executable, script, manifest_path],
+            [sys.executable, "-m", "nono_librarian.cli.validate_manifest", manifest_path],
             capture_output=True, text=True, timeout=30
         )
         output = json.loads(result.stdout) if result.stdout.strip() else {}
@@ -102,11 +91,10 @@ def check_manifest_schema(kg_folder: str) -> CheckResult:
 
 
 def check_ledger_schema(kg_folder: str) -> CheckResult:
-    """Delegate to pmid_ledger.py validate."""
-    script = os.path.join(PROJECT_ROOT, "scripts", "pmid_ledger.py")
+    """Delegate to pmid_ledger validate."""
     try:
         result = subprocess.run(
-            [sys.executable, script, "validate", kg_folder],
+            [sys.executable, "-m", "nono_librarian.cli.pmid_ledger", "validate", kg_folder],
             capture_output=True, text=True, timeout=30
         )
         passed = result.returncode == 0

@@ -19,9 +19,8 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import build, llm, pubmed
-from lib.frontmatter import parse as parse_node, write as write_node
+from nono_librarian.lib import build, llm, pubmed
+from nono_librarian.lib.frontmatter import parse as parse_node, write as write_node
 
 
 def source_report(topic, mode, breadth, sub_queries, articles):
@@ -155,7 +154,7 @@ def build_run_record(*, kg_name, mode, version, timestamp, nodes, passed, failed
 
 
 def _run(*args):
-    subprocess.run([sys.executable, *args], check=True)
+    subprocess.run([sys.executable, "-m", *args], check=True)
 
 
 def _evaluate_and_writeback(kg_folder, nodes, today, *, fetch_metadata, fetch_full_text, chat):
@@ -164,7 +163,7 @@ def _evaluate_and_writeback(kg_folder, nodes, today, *, fetch_metadata, fetch_fu
     Shared by run_build and (later) run_update so the ~20-line loop is not
     duplicated. Returns (passed, failed) counts.
     """
-    import librarian_evaluate as le
+    from nono_librarian.cli import librarian_evaluate as le
     passed = failed = 0
     fm_by_node = {}
     for n in nodes:
@@ -195,21 +194,21 @@ def _evaluate_and_writeback(kg_folder, nodes, today, *, fetch_metadata, fetch_fu
     return passed, failed
 
 
-def _persist_and_classify(scripts_dir, kg_folder, articles):
+def _persist_and_classify(kg_folder, articles):
     """Ledger-persist this run's used PMIDs, then classify evidence tiers + stamp literature."""
     if articles:
         batch_path = os.path.join(kg_folder, "_build_ledger_batch.json")
         with open(batch_path, "w", encoding="utf-8") as fh:
             json.dump(ledger_batch_for_used(articles), fh)
-        _run(os.path.join(scripts_dir, "pmid_ledger.py"), "batch-add",
+        _run("nono_librarian.cli.pmid_ledger", "batch-add",
              kg_folder, "--input", batch_path)
         os.remove(batch_path)
-    _run(os.path.join(scripts_dir, "classify_evidence_tier.py"),
+    _run("nono_librarian.cli.classify_evidence_tier",
          kg_folder, "--update-ledger")
-    _run(os.path.join(scripts_dir, "stamp_literature.py"), kg_folder)
+    _run("nono_librarian.cli.stamp_literature", kg_folder)
 
 
-def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None,
+def _finalize_kg(kg_folder, *, op, summary, overview_text=None,
                  run_record=None):
     """Quarantine enforcement, index, stats, validation, embeddings (non-fatal), log.
 
@@ -217,16 +216,16 @@ def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None,
     renders the audit digest (``digests/<run_id>.md`` + ``_digest.md``). Digest
     rendering is non-fatal — it never fails the run.
     """
-    _run(os.path.join(scripts_dir, "enforce_quarantine.py"), kg_folder)
+    _run("nono_librarian.cli.enforce_quarantine", kg_folder)
     if overview_text is not None:
-        _run(os.path.join(scripts_dir, "generate_index.py"), kg_folder,
+        _run("nono_librarian.cli.generate_index", kg_folder,
              "--overview-text", overview_text)
     else:
-        _run(os.path.join(scripts_dir, "generate_index.py"), kg_folder)
-    _run(os.path.join(scripts_dir, "update_manifest_stats.py"), kg_folder)
-    _run(os.path.join(scripts_dir, "validate_manifest.py"),
+        _run("nono_librarian.cli.generate_index", kg_folder)
+    _run("nono_librarian.cli.update_manifest_stats", kg_folder)
+    _run("nono_librarian.cli.validate_manifest",
          os.path.join(kg_folder, "manifest.json"))
-    subprocess.run([sys.executable, os.path.join(scripts_dir, "build_embeddings.py"),
+    subprocess.run([sys.executable, "-m", "nono_librarian.cli.build_embeddings",
                     kg_folder], check=False)  # non-fatal
     # Persist the run-record + digest BEFORE append_log: the run-record is the
     # durable baseline for future updates, so it must survive a log-append
@@ -238,26 +237,25 @@ def _finalize_kg(scripts_dir, kg_folder, *, op, summary, overview_text=None,
         with open(rr_path, "w", encoding="utf-8") as fh:
             json.dump(run_record, fh, indent=2)
         # Digest is read-after-stats; never fails the run (matches build-kg 1e).
-        subprocess.run([sys.executable, os.path.join(scripts_dir, "render_digest.py"),
+        subprocess.run([sys.executable, "-m", "nono_librarian.cli.render_digest",
                         kg_folder, "--run-record", rr_path], check=False)
-    _run(os.path.join(scripts_dir, "append_log.py"), kg_folder,
+    _run("nono_librarian.cli.append_log", kg_folder,
          "--op", op, "--summary", summary)
 
 
 def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_text,
               chat, breadth_override, today, run_subprocess=True, prompt_fn=None):
     os.makedirs(os.path.join(kg_folder, "nodes"), exist_ok=True)
-    scripts_dir = os.path.dirname(os.path.abspath(__file__))
 
     plan = build.plan_search(topic, chat=chat, breadth_override=breadth_override)
     breadth, sub_queries = plan["breadth"], plan["sub_queries"]
     tier = build.TIERS[breadth]
 
     if run_subprocess:
-        _run(os.path.join(scripts_dir, "pmid_ledger.py"), "init",
+        _run("nono_librarian.cli.pmid_ledger", "init",
              kg_folder, "--kg-name", kg_name)
         known = set(json.loads(subprocess.run(
-            [sys.executable, os.path.join(scripts_dir, "pmid_ledger.py"), "query",
+            [sys.executable, "-m", "nono_librarian.cli.pmid_ledger", "query",
              kg_folder, "--pmids-only"], capture_output=True, text=True, check=True
         ).stdout))
     else:
@@ -280,7 +278,7 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
         json.dump(manifest, fh, indent=2)
 
     if run_subprocess:
-        _persist_and_classify(scripts_dir, kg_folder, articles)
+        _persist_and_classify(kg_folder, articles)
 
     # Phase 3 evaluation — reuse the Phase-2 evaluator in-process.
     passed, failed = _evaluate_and_writeback(
@@ -291,7 +289,7 @@ def run_build(topic, kg_folder, kg_name, *, esearch, fetch_metadata, fetch_full_
         run_record = build_run_record(
             kg_name=kg_name, mode="build", version=1, timestamp=_now_iso(),
             nodes=nodes, passed=passed, failed=failed)
-        _finalize_kg(scripts_dir, kg_folder, op="build",
+        _finalize_kg(kg_folder, op="build",
                      summary=f"Local BUILD: {len(nodes)} nodes, {passed} passed, {failed} failed.",
                      overview_text=f"Knowledge graph on {topic}.", run_record=run_record)
 
@@ -328,13 +326,11 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
         gap_qs = []
 
     if run_subprocess:
-        scripts_dir = os.path.dirname(os.path.abspath(__file__))
         known = set(json.loads(subprocess.run(
-            [sys.executable, os.path.join(scripts_dir, "pmid_ledger.py"), "query",
+            [sys.executable, "-m", "nono_librarian.cli.pmid_ledger", "query",
              kg_folder, "--pmids-only"], capture_output=True, text=True, check=True
         ).stdout))
     else:
-        scripts_dir = None
         known = {p for n in manifest["nodes"] for p in n.get("pubmed_ids", [])}
 
     sub_queries = recent_qs + gap_qs
@@ -362,7 +358,7 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
         json.dump(manifest, fh, indent=2)
 
     if run_subprocess:
-        _persist_and_classify(scripts_dir, kg_folder, articles)
+        _persist_and_classify(kg_folder, articles)
 
     # Evaluate new nodes via the shared helper (reads node files written above).
     passed, failed = _evaluate_and_writeback(
@@ -375,7 +371,7 @@ def run_update(topic, kg_folder, *, esearch, fetch_metadata, fetch_full_text, ch
             kg_name=manifest["kg_name"], mode="update", version=manifest["version"],
             timestamp=_now_iso(), nodes=new_nodes, passed=passed, failed=failed,
             since_date=since_date)
-        _finalize_kg(scripts_dir, kg_folder, op="update",
+        _finalize_kg(kg_folder, op="update",
                      summary=f"Local UPDATE: {new_nodes_count} new nodes, {passed} passed, {failed} failed.",
                      run_record=run_record)
 

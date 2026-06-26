@@ -16,8 +16,7 @@ import os
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import embeddings
+from nono_librarian.lib import embeddings
 
 INDEX_FILENAME = "_embeddings.json"
 
@@ -60,11 +59,11 @@ def _write_atomic(path, data):
     os.replace(tmp, path)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Build/refresh a KG's node embedding index.")
     parser.add_argument("kg_folder")
     parser.add_argument("--json", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     manifest_path = os.path.join(args.kg_folder, "manifest.json")
     if not os.path.exists(manifest_path):
