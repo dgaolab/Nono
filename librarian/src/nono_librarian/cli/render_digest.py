@@ -185,7 +185,7 @@ import sys
 
 from nono_librarian.cli.append_log import append_entry
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 DEFAULT_COST_LOG = os.path.join(REPO_ROOT, "_cost_log.jsonl")
 
 
