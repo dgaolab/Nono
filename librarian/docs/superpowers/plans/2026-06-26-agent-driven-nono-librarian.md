@@ -4,7 +4,7 @@
 
 **Goal:** Rewrite nono-librarian so the running agent (Claude or Hermes) performs all KG-curation reasoning, remove the served-local-model seam, and ship the toolkit as a pip-installable package living in a shared `~/.nono` uv venv.
 
-**Architecture:** Reasoning leaves Python and moves into the agent (driven by SKILL.md). The toolkit becomes the `nono_librarian` package (src layout) exposing one `nono` CLI. Deterministic mechanics stay: retrieval (`nono gather`), structural assembly (`nono assemble`), the whole finish pipeline (`nono finalize`), and the verbatim-quote guardrail (`nono verify`). The agent hands structured JSON (`_nodes.json`, verdicts) to these CLIs.
+**Architecture:** Reasoning leaves Python and moves into the agent (driven by SKILL.md). The toolkit becomes the `nono_librarian` package (src layout) exposing one `nono-librarian` console script (its own binary — the bare `nono` name is reserved for a future umbrella dispatcher across modules). Deterministic mechanics stay: retrieval (`nono gather`), structural assembly (`nono assemble`), the whole finish pipeline (`nono finalize`), and the verbatim-quote guardrail (`nono verify`). The agent hands structured JSON (`_nodes.json`, verdicts) to these CLIs.
 
 **Tech Stack:** Python 3.14, uv, fastembed/onnxruntime, PyYAML, jsonschema, pytest. NCBI E-utilities (stdlib urllib). No model SDKs.
 
@@ -26,7 +26,7 @@
 
 ### Task 1: Convert the repo to an installable `nono_librarian` package
 
-Make the existing code an installed, importable package with a `nono` console entry point. **No behavior changes** — the goal is a green suite under the new layout. (`lib/llm.py` and the model orchestrators are kept here and removed in Phase 2.)
+Make the existing code an installed, importable package with a `nono-librarian` console entry point. **No behavior changes** — the goal is a green suite under the new layout. (`lib/llm.py` and the model orchestrators are kept here and removed in Phase 2.)
 
 **Files:**
 - Create: `pyproject.toml`
@@ -40,7 +40,7 @@ Make the existing code an installed, importable package with a `nono` console en
 - Delete: `requirements.txt`, stray `__pycache__/`
 
 **Interfaces:**
-- Produces: package `nono_librarian` (editable-installed); console script `nono` → `nono_librarian.cli.__main__:main`; `nono_librarian.paths.data_file(*parts) -> pathlib.Path` and `nono_librarian.paths.schemas_dir() -> pathlib.Path`, `templates_dir() -> pathlib.Path`.
+- Produces: package `nono_librarian` (editable-installed); console script `nono-librarian` → `nono_librarian.cli.__main__:main`; `nono_librarian.paths.data_file(*parts) -> pathlib.Path` and `nono_librarian.paths.schemas_dir() -> pathlib.Path`, `templates_dir() -> pathlib.Path`.
 - Consumes: nothing (first task).
 
 - [ ] **Step 1: Write `pyproject.toml`**
@@ -65,7 +65,7 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-nono = "nono_librarian.cli.__main__:main"
+nono-librarian = "nono_librarian.cli.__main__:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -192,12 +192,12 @@ In `src/nono_librarian/cli/generate_index.py`, load the index template via `data
 grep -rn 'templates\|schemas\|graph_schema\|index_template\|node_template' src/nono_librarian/cli | grep -v data_file
 ```
 
-- [ ] **Step 7: Add the `nono` dispatcher**
+- [ ] **Step 7: Add the `nono-librarian` dispatcher**
 
 Create `src/nono_librarian/cli/__main__.py`. It maps a subcommand to the matching module's `main(argv)` and forwards the remaining args. Only modules whose `main` accepts an `argv` list are listed; all current CLIs already define `main(argv=None)`.
 
 ```python
-"""`nono` — single entry point dispatching to nono_librarian.cli.* subcommands."""
+"""`nono-librarian` — entry point dispatching to nono_librarian.cli.* subcommands."""
 import importlib
 import sys
 
@@ -221,13 +221,13 @@ COMMANDS = {
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help"):
-        print("usage: nono <command> [args]\n\ncommands:")
+        print("usage: nono-librarian <command> [args]\n\ncommands:")
         for name in sorted(COMMANDS):
             print(f"  {name}")
         return 0 if argv else 2
     cmd, rest = argv[0], argv[1:]
     if cmd not in COMMANDS:
-        print(f"nono: unknown command {cmd!r}. Try 'nono --help'.", file=sys.stderr)
+        print(f"nono-librarian: unknown command {cmd!r}. Try 'nono-librarian --help'.", file=sys.stderr)
         return 2
     mod = importlib.import_module(f"nono_librarian.cli.{COMMANDS[cmd]}")
     return mod.main(rest)
@@ -510,7 +510,7 @@ def judge_node(node_id, frontmatter, judgments_for_node, *,
             "overall_status": status, "notes": note}
 ```
 
-Keep `build_source_text`, `frontmatter_updates`, `_node_files`, `_now`. The module-level `main()` (CLI) is superseded by `nono verify` (Task 6) — delete `main()` and the `if __name__` block from this module now, and remove `"evaluate": "librarian_evaluate"` from the dispatcher `COMMANDS` (it returns in Task 6 as `verify`). Confirm no `llm` references remain anywhere:
+Keep `build_source_text`, `frontmatter_updates`, `_node_files`, `_now`. The module-level `main()` (CLI) is superseded by `nono-librarian verify` (Task 6) — delete `main()` and the `if __name__` block from this module now, and remove `"evaluate": "librarian_evaluate"` from the dispatcher `COMMANDS` (it returns in Task 6 as `verify`). Confirm no `llm` references remain anywhere:
 
 ```bash
 grep -rn 'llm\|LLMUnavailable\|chat=' src/nono_librarian || echo "clean"
@@ -607,7 +607,7 @@ Expected: FAIL (module missing).
 
 ```python
 #!/usr/bin/env python3
-"""`nono gather` — deterministic PubMed retrieval for agent-driven build."""
+"""`nono-librarian gather` — deterministic PubMed retrieval for agent-driven build."""
 import argparse
 import json
 import sys
@@ -644,7 +644,7 @@ def gather_articles(sub_queries, *, esearch, fetch_metadata, fetch_full_text,
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="nono gather",
+    parser = argparse.ArgumentParser(prog="nono-librarian gather",
                                      description="Retrieve PubMed candidate articles")
     parser.add_argument("topic")
     parser.add_argument("--query", action="append", dest="queries", required=True,
@@ -829,7 +829,7 @@ Expected: FAIL (module missing).
 
 ```python
 #!/usr/bin/env python3
-"""`nono assemble` — turn agent _nodes.json into node files + manifest (no model)."""
+"""`nono-librarian assemble` — turn agent _nodes.json into node files + manifest (no model)."""
 import argparse
 import datetime
 import json
@@ -896,7 +896,7 @@ def judgments_from_input(raw_nodes, nodes):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="nono assemble",
+    parser = argparse.ArgumentParser(prog="nono-librarian assemble",
                                      description="Write node files + manifest from _nodes.json")
     parser.add_argument("kg_folder")
     parser.add_argument("--nodes", required=True, help="agent _nodes.json")
@@ -1018,7 +1018,7 @@ Expected: FAIL (module missing).
 
 ```python
 #!/usr/bin/env python3
-"""`nono verify` — apply agent verdicts to a KG behind the verbatim-quote guardrail."""
+"""`nono-librarian verify` — apply agent verdicts to a KG behind the verbatim-quote guardrail."""
 import argparse
 import datetime
 import json
@@ -1066,7 +1066,7 @@ def verify_kg(kg_folder, judgments, *, only_ids=None,
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="nono verify",
+    parser = argparse.ArgumentParser(prog="nono-librarian verify",
                                      description="Guardrailed evaluation writeback from agent verdicts")
     parser.add_argument("kg_folder")
     parser.add_argument("--verdicts", default=None,
@@ -1166,7 +1166,7 @@ Port the deterministic pipeline from the old `librarian_build.py`. Copy `build_r
 
 ```python
 #!/usr/bin/env python3
-"""`nono finalize` — deterministic finish pipeline for an assembled KG (no model)."""
+"""`nono-librarian finalize` — deterministic finish pipeline for an assembled KG (no model)."""
 import argparse
 import datetime
 import json
@@ -1287,7 +1287,7 @@ def finalize_kg(kg_folder, *, mode, version, candidates_path=None,
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="nono finalize",
+    parser = argparse.ArgumentParser(prog="nono-librarian finalize",
                                      description="Run the deterministic KG finish pipeline")
     parser.add_argument("kg_folder")
     parser.add_argument("--mode", choices=["build", "update"], default="build")
@@ -1352,22 +1352,22 @@ description: >-
   libririan KG (folders with manifest.json + nodes/) on their own machine, or
   mentions running the librarian "locally", "offline", "in the nono env", or
   "without the Claude PubMed MCP". The toolkit installs into a shared ~/.nono uv
-  venv and is invoked as `$NONO_HOME/.venv/bin/nono <command>`.
+  venv and is invoked as `$NONO_HOME/.venv/bin/nono-librarian <command>`.
 ---
 
 # nono-librarian
 
 The harness-agnostic front door to the libririan toolkit. Two jobs: **(1)
 guarantee the shared `~/.nono` environment**, and **(2) dispatch** a request to
-the right deterministic `nono` subcommand — while **you, the running agent, do
-all the reasoning**. No Claude PubMed MCP, no served model.
+the right deterministic `nono-librarian` subcommand — while **you, the running
+agent, do all the reasoning**. No Claude PubMed MCP, no served model.
 
 ## Step 1 — Guarantee the environment (always first)
 
 `~/.nono` is the research-assistant home (a normal directory). It holds ONE
 shared uv venv at `~/.nono/.venv`; nono-librarian is the module at
 `~/.nono/librarian`, installed editable into that venv. Everything runs through
-`$NONO_HOME/.venv/bin/nono`.
+`$NONO_HOME/.venv/bin/nono-librarian`.
 
 ```bash
 NONO_HOME="${NONO_HOME:-$HOME/.nono}"
@@ -1379,16 +1379,16 @@ mkdir -p "$HOME/.claude/skills"
 ln -sfn "$NONO_HOME/librarian/.claude/skills/nono-librarian" "$HOME/.claude/skills/nono-librarian"
 ```
 
-Invoke the toolkit as `"$NONO_HOME/.venv/bin/nono" <command> …`. Python 3.14 is
-the newest the embedding runtime (onnxruntime) ships wheels for. `requirements`
-live in `pyproject.toml`; there is no `requirements.txt` and no conda.
+Invoke the toolkit as `"$NONO_HOME/.venv/bin/nono-librarian" <command> …`.
+Python 3.14 is the newest the embedding runtime (onnxruntime) ships wheels for.
+`requirements` live in `pyproject.toml`; there is no `requirements.txt` and no conda.
 
 ## Step 2 — You are the reasoner (no model to find)
 
 There is **no model discovery, no `LLM_*` env, no OpenAI/Anthropic endpoint**.
 The agent reading this skill performs every reasoning step itself: search
 planning, node design, per-node synthesis, relationship calls, and the
-claim↔evidence judgment. The `nono` subcommands do only deterministic work —
+claim↔evidence judgment. The `nono-librarian` subcommands do only deterministic work —
 retrieval, structural writes, the finish pipeline, and the verbatim-quote
 guardrail. You hand them structured JSON.
 
@@ -1399,7 +1399,7 @@ quotes appears **verbatim** in the article text; otherwise it is forced to
 
 ## Step 3 — Dispatch by intent
 
-Let `N="$NONO_HOME/.venv/bin/nono"`.
+Let `N="$NONO_HOME/.venv/bin/nono-librarian"`.
 
 ### Query / search a KG
 `$N search "<query>" <KG>/manifest.json --top 10` ranks nodes (semantic +
@@ -1478,7 +1478,7 @@ test -d "$NONO_HOME/librarian" || git clone git@github.com:dgaolab/Nono.git "$NO
 uv pip install --python "$NONO_HOME/.venv" -e "$NONO_HOME/librarian"
 mkdir -p "$HOME/.claude/skills"
 ln -sfn "$NONO_HOME/librarian/.claude/skills/nono-librarian" "$HOME/.claude/skills/nono-librarian"
-echo "nono-librarian ready: $NONO_HOME/.venv/bin/nono --help"
+echo "nono-librarian ready: $NONO_HOME/.venv/bin/nono-librarian --help"
 ```
 
 ```bash
@@ -1517,11 +1517,11 @@ cd "$(git rev-parse --show-toplevel)"
 rm -rf .venv-dev && uv venv .venv-dev --python 3.14
 uv pip install --python .venv-dev -e ".[dev]"
 .venv-dev/bin/python -m pytest -q
-.venv-dev/bin/nono --help
-.venv-dev/bin/nono lint --help
+.venv-dev/bin/nono-librarian --help
+.venv-dev/bin/nono-librarian lint --help
 ```
 
-Expected: all tests PASS; `nono --help` lists `assemble, chase, cost-report, cross-index, digest, embeddings, finalize, gather, index, ledger, lint, preflight, retractions, search, verify`; `nono lint --help` prints linter usage. Confirm no `llm`/model references survive anywhere:
+Expected: all tests PASS; `nono-librarian --help` lists `assemble, chase, cost-report, cross-index, digest, embeddings, finalize, gather, index, ledger, lint, preflight, retractions, search, verify`; `nono-librarian lint --help` prints linter usage. Confirm no `llm`/model references survive anywhere:
 
 ```bash
 grep -rn 'LLMUnavailable\|LLM_BASE_URL\|lib.llm\|import llm\|chat=llm' src tests || echo "clean"
@@ -1540,7 +1540,7 @@ git commit -m "chore: bootstrap script, gitignore, final cleanup"
 
 **Spec coverage:**
 - §3 env layout → Task 8 (SKILL.md Step 1), Task 9 (bootstrap).
-- §4 packaging (pyproject, src, `nono` CLI, packaged data) → Task 1.
+- §4 packaging (pyproject, src, `nono-librarian` CLI, packaged data) → Task 1.
 - §5 reasoning-seam removal → Tasks 2, 3.
 - §6 curation flow (gather/assemble/finalize/verify, UPDATE via start-id) → Tasks 4–7, SKILL.md.
 - §7 `nodes_input_schema.json` (+ verdicts shape, folded into `_judgments.json`) → Task 5.
