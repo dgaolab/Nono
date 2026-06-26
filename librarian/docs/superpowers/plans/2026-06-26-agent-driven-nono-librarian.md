@@ -83,7 +83,7 @@ testpaths = ["tests"]
 - [ ] **Step 2: Move the source tree with git**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)/librarian"   # toolkit lives in the librarian/ subdir of the Nono repo
 mkdir -p src/nono_librarian/data
 git rm -r --cached scripts/lib/__pycache__ scripts/__pycache__ __pycache__ 2>/dev/null || true
 rm -rf scripts/lib/__pycache__ scripts/__pycache__ __pycache__
@@ -128,7 +128,7 @@ def templates_dir():
 - [ ] **Step 4: Rewrite imports in moved modules**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)/librarian"   # toolkit lives in the librarian/ subdir of the Nono repo
 # package-internal imports
 grep -rl 'from lib' src/nono_librarian | xargs sed -i \
   -e 's/^from lib\.frontmatter import/from nono_librarian.lib.frontmatter import/' \
@@ -242,7 +242,7 @@ if __name__ == "__main__":
 In `tests/unit/`, replace the `sys.path.insert(... "scripts")` + `from lib import X` / `import <script>` pattern with package imports. Apply across the suite:
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)/librarian"   # toolkit lives in the librarian/ subdir of the Nono repo
 grep -rl 'scripts' tests/unit | xargs sed -i \
   -e '/sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))/d' \
   -e 's/^from lib\./from nono_librarian.lib./' \
@@ -262,7 +262,7 @@ grep -rn 'from lib\b\|"scripts"\|^import librarian\|^import search_nodes' tests/
 - [ ] **Step 9: Create the venv, install editable, run the full suite**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)/librarian"   # toolkit lives in the librarian/ subdir of the Nono repo
 uv venv .venv-dev --python 3.14   # local dev venv; the ~/.nono/.venv bootstrap is Task 9
 uv pip install --python .venv-dev -e ".[dev]"
 .venv-dev/bin/python -m pytest -q
@@ -1513,7 +1513,7 @@ _judgments.json
 - [ ] **Step 3: Full suite + smoke test from a clean install**
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)/librarian"   # toolkit lives in the librarian/ subdir of the Nono repo
 rm -rf .venv-dev && uv venv .venv-dev --python 3.14
 uv pip install --python .venv-dev -e ".[dev]"
 .venv-dev/bin/python -m pytest -q
