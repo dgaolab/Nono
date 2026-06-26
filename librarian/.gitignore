@@ -10,6 +10,9 @@ src/nono_librarian/**/__pycache__/
 .venv/
 .venv-dev/
 
+# editable-install build metadata
+*.egg-info/
+
 # Generated KG artifacts
 _cost_log.jsonl
 _embeddings.json
