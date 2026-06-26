@@ -3,10 +3,7 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-import search_nodes
-
-SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "search_nodes.py"))
+from nono_librarian.cli import search_nodes
 
 
 def _write_kg(tmp_path, nodes, index=None):
@@ -51,7 +48,7 @@ def test_baseline_lexical_ranking_without_index(tmp_path):
         _node("n_match", "Epilepsy", "seizure disorder", keywords=["epilepsy", "seizure"]),
         _node("n_other", "Cardiology", "heart rhythm", keywords=["cardiac", "arrhythmia"]),
     ])
-    res = subprocess.run([sys.executable, SCRIPT, "epilepsy seizure", str(kg / "manifest.json")],
+    res = subprocess.run([sys.executable, "-m", "nono_librarian.cli.search_nodes", "epilepsy seizure", str(kg / "manifest.json")],
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
     out = json.loads(res.stdout)
@@ -72,7 +69,7 @@ def test_semantic_boosts_node_close_to_query(tmp_path):
     ], index=index)
     qfix = tmp_path / "q.json"
     qfix.write_text(json.dumps([1.0, 0.0, 0.0]), encoding="utf-8")   # query vector == n_close's
-    res = subprocess.run([sys.executable, SCRIPT, "unrelated query", str(kg / "manifest.json"),
+    res = subprocess.run([sys.executable, "-m", "nono_librarian.cli.search_nodes", "unrelated query", str(kg / "manifest.json"),
                           "--query-embedding-fixture", str(qfix)],
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr
@@ -89,7 +86,7 @@ def test_no_semantic_flag_ignores_index(tmp_path):
     kg = _write_kg(tmp_path, [_node("n_close", "Alpha", "zzz", keywords=["zzz"])], index=index)
     qfix = tmp_path / "q.json"
     qfix.write_text(json.dumps([1.0, 0.0, 0.0]), encoding="utf-8")
-    res = subprocess.run([sys.executable, SCRIPT, "unrelated", str(kg / "manifest.json"),
+    res = subprocess.run([sys.executable, "-m", "nono_librarian.cli.search_nodes", "unrelated", str(kg / "manifest.json"),
                           "--no-semantic", "--query-embedding-fixture", str(qfix)],
                          capture_output=True, text=True)
     assert res.returncode == 0, res.stderr

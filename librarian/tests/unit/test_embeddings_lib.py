@@ -1,8 +1,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-from lib import embeddings
+from nono_librarian.lib import embeddings
 
 
 def test_constants():

@@ -2,14 +2,7 @@ import os
 import sys
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-from lib import build
-
-
-def _chat_returning(reply):
-    def chat(messages, **kw):
-        return reply
-    return chat
+from nono_librarian.lib import build
 
 
 def test_tiers_have_expected_keys():
@@ -19,72 +12,10 @@ def test_tiers_have_expected_keys():
                 "nodes_min", "nodes_max"} <= set(t)
 
 
-def test_plan_search_returns_breadth_and_subqueries():
-    chat = _chat_returning(
-        '{"breadth": "medium", "sub_queries": ["a immune response", "b delivery"]}')
-    out = build.plan_search("mRNA vaccines", chat=chat)
-    assert out["breadth"] == "medium"
-    assert out["sub_queries"] == ["a immune response", "b delivery"]
-
-
-def test_plan_search_honors_breadth_override():
-    chat = _chat_returning('{"breadth": "broad", "sub_queries": ["x", "y", "z"]}')
-    out = build.plan_search("t", chat=chat, breadth_override="narrow")
-    assert out["breadth"] == "narrow"
-
-
-def test_plan_search_raises_on_unparseable():
-    chat = _chat_returning("I cannot help")
-    with pytest.raises(build.BuildError):
-        build.plan_search("t", chat=chat)
-
-
 def test_select_candidates_dedups_excludes_and_caps():
     out = build.select_candidates(
         [["1", "2", "3"], ["2", "4", "5"]], known_pmids={"3"}, cap=3)
     assert out == ["1", "2", "4"]
-
-
-_ARTS = [
-    {"pmid": "1", "title": "Melatonin and clock genes", "abstract": "Melatonin entrains the SCN."},
-    {"pmid": "2", "title": "Melatonin for sleep", "abstract": "Melatonin reduces sleep latency."},
-]
-
-
-def test_propose_skeleton_filters_hallucinated_pmids_and_empty_nodes():
-    reply = (
-        '{"nodes": ['
-        '{"title": "SCN entrainment", "summary": "Melatonin entrains the clock.", "pmids": ["1", "999"]},'
-        '{"title": "Sleep latency", "summary": "Melatonin shortens sleep latency.", "pmids": ["2"]},'
-        '{"title": "Ghost", "summary": "Nothing real.", "pmids": ["999"]}'
-        ']}'
-    )
-    def chat(messages, **kw):
-        return reply
-    out = build.propose_skeleton("melatonin", _ARTS, chat=chat, nodes_min=1, nodes_max=10)
-    assert len(out) == 2
-    assert out[0]["pmids"] == ["1"]          # 999 dropped
-    assert out[1]["pmids"] == ["2"]
-    assert all(n["title"] and n["summary"] for n in out)
-
-
-def test_synthesize_node_shapes_fields_and_filters_supports():
-    skel = {"title": "Sleep latency", "summary": "Melatonin shortens sleep latency.", "pmids": ["2"]}
-    arts = {"2": {"pmid": "2", "title": "Melatonin for sleep", "abstract": "Melatonin reduces sleep latency."}}
-    reply = (
-        '{"title": "Sleep latency", "summary": "Melatonin shortens sleep latency.",'
-        '"detail": "Across trials melatonin reduced latency.",'
-        '"tags": ["sleep", "melatonin"], "keywords": ["melatonin", "sleep latency"],'
-        '"entities": [{"name": "melatonin", "type": "drug", "normalized_id": "FAKE:1"}],'
-        '"supports": {"2": "Reports reduced sleep latency.", "999": "should be dropped"}}'
-    )
-    def chat(messages, **kw):
-        return reply
-    out = build.synthesize_node(skel, arts, chat=chat)
-    assert out["category"] == "sleep"
-    assert set(out["supports"]) == {"2"}                 # 999 dropped
-    assert out["entities"][0] == {"name": "melatonin", "type": "drug"}  # no id
-    assert out["keywords"] and out["detail"]
 
 
 def test_slugify_is_snake_case_and_short():
@@ -122,22 +53,8 @@ _REL_NODES = [
 ]
 
 
-def test_propose_relationships_validates_edges():
-    reply = ('{"edges": [{"source": "node_001", "target": "node_002", "relationship": "supports"},'
-             '{"source": "node_001", "target": "node_999", "relationship": "supports"},'
-             '{"source": "node_002", "target": "node_001", "relationship": "bogus"}]}')
-    def chat(messages, **kw):
-        return reply
-    out = build.propose_relationships(_REL_NODES, chat=chat)
-    assert {"source": "node_001", "target": "node_002", "relationship": "supports"} in out
-    assert all(e["target"] != "node_999" for e in out)
-    assert all(e["relationship"] != "bogus" for e in out)
-
-
-def test_propose_relationships_falls_back_to_shared_pmids():
-    def chat(messages, **kw):
-        return "garbage"
-    out = build.propose_relationships(_REL_NODES, chat=chat)
+def test_shared_pmid_edges_links_overlapping_nodes():
+    out = build._shared_pmid_edges(_REL_NODES)
     # node_001 & node_002 share PMID 2 → a related_to edge; node_003 shares none
     assert any({e["source"], e["target"]} == {"node_001", "node_002"} for e in out)
     assert all("node_003" not in (e["source"], e["target"]) for e in out)
@@ -172,10 +89,3 @@ def test_weak_spots_finds_under_referenced_and_failed():
         {"id": "node_003", "pubmed_ids": ["3", "4"], "evaluation_status": "failed"},
     ]
     assert set(build.weak_spots(nodes)) == {"node_001", "node_003"}
-
-
-def test_gap_fill_queries_returns_strings():
-    def chat(messages, **kw):
-        return '{"queries": ["alt term A", "MeSH B"]}'
-    out = build.gap_fill_queries("topic", ["summary one"], chat=chat, count=2)
-    assert out == ["alt term A", "MeSH B"]

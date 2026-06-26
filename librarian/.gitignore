@@ -2,8 +2,20 @@
 tests/output/
 
 # Python
-scripts/lib/__pycache__/
 __pycache__/
 *.pyc
+src/nono_librarian/**/__pycache__/
+
+# venvs (never tracked; live outside the repo in ~/.nono, plus local dev)
+.venv/
+.venv-dev/
+
+# editable-install build metadata
+*.egg-info/
+
+# Generated KG artifacts
 _cost_log.jsonl
 _embeddings.json
+_candidates.json
+_nodes.json
+_judgments.json

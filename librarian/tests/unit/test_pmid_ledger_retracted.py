@@ -4,11 +4,10 @@ import sys
 
 import jsonschema
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-import pmid_ledger
+from nono_librarian.cli import pmid_ledger
+from nono_librarian.paths import data_file
 
-SCHEMA_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "schemas", "pmid_ledger_schema.json"))
+SCHEMA_PATH = str(data_file("schemas", "pmid_ledger_schema.json"))
 
 
 def test_retracted_in_dispositions():

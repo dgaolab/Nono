@@ -24,7 +24,7 @@ def make_kg(tmp_path, schedule=None):
 
 def run_stats(kg, *extra):
     return subprocess.run(
-        [sys.executable, "scripts/update_manifest_stats.py", str(kg), *extra],
+        [sys.executable, "-m", "nono_librarian.cli.update_manifest_stats", str(kg), *extra],
         cwd=PROJECT_ROOT, capture_output=True, text=True)
 
 

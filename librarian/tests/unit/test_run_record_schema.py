@@ -3,8 +3,9 @@ import os
 
 import jsonschema
 
-SCHEMA_PATH = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "schemas", "run_record_schema.json"))
+from nono_librarian.paths import data_file
+
+SCHEMA_PATH = str(data_file("schemas", "run_record_schema.json"))
 
 
 def load_schema():

@@ -1,11 +1,10 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-from lib.frontmatter import parse
+from nono_librarian.lib.frontmatter import parse
+from nono_librarian.paths import data_file
 
-TEMPLATE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..",
-                                        "templates", "node_template.md"))
+TEMPLATE = str(data_file("templates", "node_template.md"))
 
 
 def test_template_parses_and_documents_quotes():

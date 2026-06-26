@@ -4,9 +4,8 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-import build_embeddings
-from lib import embeddings
+from nono_librarian.cli import build_embeddings
+from nono_librarian.lib import embeddings
 
 
 def _fake_embedder(record):

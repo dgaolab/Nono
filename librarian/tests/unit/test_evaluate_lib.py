@@ -1,51 +1,44 @@
-import os
-import sys
+from nono_librarian.lib import evaluate
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-from lib import evaluate
-
 
 # --------------------------------------------------------------------------
-# parse_response — robust JSON extraction from a small model's drift
+# parse_judgment — validate an agent-supplied verdict dict
 # --------------------------------------------------------------------------
 
-def test_parse_response_plain_json():
-    out = evaluate.parse_response(
-        '{"verdict": "supported", "reasoning": "ok", '
-        '"quotes": [{"text": "A says B.", "source": "abstract"}]}')
-    assert out["verdict"] == "supported"
-    assert out["reasoning"] == "ok"
-    assert out["quotes"] == [{"text": "A says B.", "source": "abstract"}]
+def test_parse_judgment_accepts_agent_dict():
+    j = evaluate.parse_judgment(
+        {"verdict": "supported", "reasoning": "ok",
+         "quotes": [{"text": "BRCA1 loss impairs repair", "source": "abstract"}]})
+    assert j["verdict"] == "supported"
+    assert j["quotes"][0]["source"] == "abstract"
 
 
-def test_parse_response_strips_code_fence_and_prose():
-    text = (
-        "Sure, here is my assessment:\n"
-        "```json\n"
-        '{"verdict": "not_supported", "reasoning": "no match"}\n'
-        "```\n"
-        "Hope that helps!"
-    )
-    out = evaluate.parse_response(text)
+def test_parse_judgment_rejects_unknown_verdict():
+    with pytest.raises(evaluate.EvaluationError):
+        evaluate.parse_judgment({"verdict": "definitely", "quotes": []})
+
+
+def test_judge_pmid_forces_not_supported_without_verbatim_quote():
+    src = "Cells with BRCA1 loss show impaired homologous recombination."
+    out = evaluate.judge_pmid(
+        {"verdict": "supported", "reasoning": "claimed",
+         "quotes": [{"text": "totally fabricated sentence", "source": "abstract"}]},
+        source_text=src)
     assert out["verdict"] == "not_supported"
-    assert out["quotes"] == []  # defaulted when absent
+    assert out["quotes"] == []
+    assert out["guardrail_triggered"] is True
 
 
-def test_parse_response_normalizes_verdict_case_and_space():
-    out = evaluate.parse_response('{"verdict": "  Partially_Supported "}')
-    assert out["verdict"] == "partially_supported"
-
-
-def test_parse_response_raises_on_no_json():
-    with pytest.raises(evaluate.EvaluationError):
-        evaluate.parse_response("I cannot help with that.")
-
-
-def test_parse_response_raises_on_unknown_verdict():
-    with pytest.raises(evaluate.EvaluationError):
-        evaluate.parse_response('{"verdict": "maybe"}')
+def test_judge_pmid_keeps_verbatim_quote():
+    src = "Cells with BRCA1 loss show impaired homologous recombination."
+    out = evaluate.judge_pmid(
+        {"verdict": "supported", "reasoning": "ok",
+         "quotes": [{"text": "impaired homologous recombination", "source": "abstract"}]},
+        source_text=src)
+    assert out["verdict"] == "supported"
+    assert out["quotes"] and out["guardrail_triggered"] is False
 
 
 # --------------------------------------------------------------------------
@@ -110,70 +103,6 @@ def test_guardrail_drops_quotes_on_nonsupporting_verdict():
     out = evaluate.apply_guardrail(result, _SOURCE)
     assert out["verdict"] == "unrelated"
     assert out["quotes"] == []
-
-
-# --------------------------------------------------------------------------
-# build_prompt
-# --------------------------------------------------------------------------
-
-def test_build_prompt_includes_claim_title_and_text_and_asks_for_json():
-    msgs = evaluate.build_prompt("SCN1A causes Dravet", "Some Title", "body text here")
-    assert isinstance(msgs, list) and all("role" in m and "content" in m for m in msgs)
-    blob = " ".join(m["content"] for m in msgs)
-    assert "SCN1A causes Dravet" in blob
-    assert "Some Title" in blob
-    assert "body text here" in blob
-    assert "json" in blob.lower()
-
-
-# --------------------------------------------------------------------------
-# verify_pmid — model call + retry + guardrail, with an injected chat
-# --------------------------------------------------------------------------
-
-def _chat_returning(*replies):
-    seq = list(replies)
-    calls = {"n": 0}
-
-    def chat(messages, **kw):
-        calls["n"] += 1
-        return seq.pop(0)
-
-    chat.calls = calls
-    return chat
-
-
-def test_verify_pmid_supported_with_valid_quote():
-    chat = _chat_returning(
-        '{"verdict": "supported", "reasoning": "ok", '
-        '"quotes": [{"text": "40.2% of patients achieved a response", "source": "abstract"}]}')
-    out = evaluate.verify_pmid("claim", article_title="t", source_text=_SOURCE, chat=chat)
-    assert out["verdict"] == "supported"
-    assert len(out["quotes"]) == 1
-
-
-def test_verify_pmid_retries_on_bad_json_then_succeeds():
-    chat = _chat_returning(
-        "I refuse to output JSON",
-        '{"verdict": "unrelated", "reasoning": "different topic"}')
-    out = evaluate.verify_pmid("claim", article_title="t", source_text=_SOURCE,
-                               chat=chat, attempts=2)
-    assert out["verdict"] == "unrelated"
-    assert chat.calls["n"] == 2
-
-
-def test_verify_pmid_raises_after_exhausting_attempts():
-    chat = _chat_returning("nope", "still nope")
-    with pytest.raises(evaluate.EvaluationError):
-        evaluate.verify_pmid("claim", article_title="t", source_text=_SOURCE,
-                             chat=chat, attempts=2)
-
-
-def test_verify_pmid_propagates_model_unavailable():
-    def chat(messages, **kw):
-        raise RuntimeError("endpoint down")
-
-    with pytest.raises(RuntimeError):
-        evaluate.verify_pmid("claim", article_title="t", source_text=_SOURCE, chat=chat)
 
 
 # --------------------------------------------------------------------------

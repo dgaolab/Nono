@@ -3,10 +3,7 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "scripts")))
-
-from append_log import VALID_OPS, append_entry
+from nono_librarian.cli.append_log import VALID_OPS, append_entry
 
 
 def test_append_entry_creates_log_and_prepends(tmp_path):
