@@ -29,10 +29,15 @@ shared uv venv at `~/.nono/.venv`; nono-librarian is the module at
 NONO_HOME="${NONO_HOME:-$HOME/.nono}"
 mkdir -p "$NONO_HOME"
 test -d "$NONO_HOME/.venv" || uv venv "$NONO_HOME/.venv" --python 3.14
-test -d "$NONO_HOME/librarian" || git clone git@github.com:dgaolab/Nono.git "$NONO_HOME/librarian"
+# The toolkit is the librarian/ subdir of the Nono repo: clone the repo, then
+# point $NONO_HOME/librarian at that subdir (the editable-install target).
+test -d "$NONO_HOME/Nono" || git clone git@github.com:dgaolab/Nono.git "$NONO_HOME/Nono"
+ln -sfn "$NONO_HOME/Nono/librarian" "$NONO_HOME/librarian"
 uv pip install --python "$NONO_HOME/.venv" -e "$NONO_HOME/librarian"
 mkdir -p "$HOME/.claude/skills"
-ln -sfn "$NONO_HOME/librarian/.claude/skills/nono-librarian" "$HOME/.claude/skills/nono-librarian"
+SKILL_LINK="$HOME/.claude/skills/nono-librarian"
+[ -L "$SKILL_LINK" ] || rm -rf "$SKILL_LINK"   # replace a stale real dir
+ln -sfn "$NONO_HOME/librarian/.claude/skills/nono-librarian" "$SKILL_LINK"
 ```
 
 Invoke the toolkit as `"$NONO_HOME/.venv/bin/nono-librarian" <command> …`.
