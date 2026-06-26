@@ -54,3 +54,47 @@ def test_assemble_start_id_appends(tmp_path):
     assert rc == 0
     manifest = json.loads((kg / "manifest.json").read_text())
     assert manifest["nodes"][0]["id"] == "node_007"
+
+
+RAW2 = {
+    "sub_queries": ["tp53 mutation"],
+    "nodes": [
+        {"title": "TP53 mutation in cancer", "summary": "TP53 is mutated in many cancers.",
+         "detail": "para", "tags": ["mechanism"], "keywords": ["tp53"],
+         "entities": [{"name": "TP53", "type": "gene"}],
+         "pmids": ["999"],
+         "pubmed_ids": [{"pmid": "999", "supports": "TP53 is mutated",
+                         "verdict": "supported",
+                         "quotes": [{"text": "TP53 is mutated", "source": "abstract"}]}]},
+    ],
+}
+
+
+def test_assemble_merges_into_existing_manifest(tmp_path):
+    """UPDATE mode: second assemble must merge into existing manifest, not overwrite."""
+    kg = tmp_path / "KG_Test"
+
+    # First pass: build from RAW (2 nodes → node_001, node_002)
+    npath1 = tmp_path / "_nodes1.json"
+    npath1.write_text(json.dumps(RAW))
+    assemble.main([str(kg), "--nodes", str(npath1), "--topic", "BRCA1", "--breadth", "narrow"])
+
+    manifest_v1 = json.loads((kg / "manifest.json").read_text())
+    assert [n["id"] for n in manifest_v1["nodes"]] == ["node_001", "node_002"]
+    assert manifest_v1["version"] == 1
+
+    # Second pass: update with RAW2 (1 new node → node_003, using --start-id 3)
+    npath2 = tmp_path / "_nodes2.json"
+    npath2.write_text(json.dumps(RAW2))
+    rc = assemble.main([str(kg), "--nodes", str(npath2), "--topic", "BRCA1",
+                        "--breadth", "narrow", "--start-id", "3"])
+    assert rc == 0
+
+    manifest_v2 = json.loads((kg / "manifest.json").read_text())
+    ids = [n["id"] for n in manifest_v2["nodes"]]
+    # Both original nodes AND the new node must be present
+    assert "node_001" in ids
+    assert "node_002" in ids
+    assert "node_003" in ids
+    # Version must be bumped
+    assert manifest_v2["version"] == 2

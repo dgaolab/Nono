@@ -81,11 +81,15 @@ def finalize_kg(kg_folder, *, mode, version, candidates_path=None,
     _run("nono_librarian.cli.classify_evidence_tier", kg_folder, "--update-ledger")
     _run("nono_librarian.cli.stamp_literature", kg_folder)
 
-    # 3. guardrailed evaluation writeback from agent verdicts
+    # 3. guardrailed evaluation writeback — scoped to nodes evaluated THIS run
     judgments_path = os.path.join(kg_folder, "_judgments.json")
     judgments = verify.load_judgments(kg_folder, None) if os.path.exists(
         judgments_path) else {}
+    # target_ids: only the nodes whose judgments were produced this run
+    # (for BUILD, judgments covers all new nodes; for UPDATE, only the new batch)
+    target_ids = sorted(judgments.keys()) if judgments else node_ids
     entries = verify.verify_kg(kg_folder, judgments,
+                               only_ids=(set(target_ids) if judgments else None),
                                fetch_metadata=pubmed.fetch_metadata,
                                fetch_full_text=pubmed.fetch_full_text)
     passed = sum(1 for e in entries if e["overall_status"] == "passed")
@@ -103,9 +107,10 @@ def finalize_kg(kg_folder, *, mode, version, candidates_path=None,
                    check=False)
 
     # 5. run-record + digest (digest non-fatal), then log
+    # nodes_created and refs_added use target_ids (this-run nodes only)
     run_record = build_run_record(
         kg_name=kg_name, mode=mode, version=version, timestamp=_now_iso(),
-        nodes_created=node_ids, refs_added=_refs_added(kg_folder, node_ids),
+        nodes_created=target_ids, refs_added=_refs_added(kg_folder, set(target_ids)),
         passed=passed, failed=failed, since_date=since_date)
     runs_dir = os.path.join(kg_folder, "runs")
     os.makedirs(runs_dir, exist_ok=True)
@@ -115,7 +120,7 @@ def finalize_kg(kg_folder, *, mode, version, candidates_path=None,
     subprocess.run([sys.executable, "-m", "nono_librarian.cli.render_digest",
                     kg_folder, "--run-record", rr_path], check=False)
     _run("nono_librarian.cli.append_log", kg_folder, "--op", mode,
-         "--summary", f"Local {mode.upper()}: {len(node_ids)} nodes, {passed} passed, {failed} failed.")
+         "--summary", f"Local {mode.upper()}: {len(target_ids)} nodes, {passed} passed, {failed} failed.")
     return {"nodes": len(node_ids), "passed": passed, "failed": failed,
             "kg_folder": kg_folder, "run_id": run_record["run_id"]}
 

@@ -88,8 +88,27 @@ def main(argv=None):
     kg_name = os.path.basename(os.path.normpath(args.kg_folder))
     manifest = build.assemble_manifest(kg_name, args.topic, args.breadth,
                                        raw.get("sub_queries", []), nodes, edges, today)
-    with open(os.path.join(args.kg_folder, "manifest.json"), "w", encoding="utf-8") as fh:
-        json.dump(manifest, fh, indent=2)
+
+    manifest_path = os.path.join(args.kg_folder, "manifest.json")
+    if os.path.exists(manifest_path):
+        # UPDATE: merge new nodes/edges into the existing manifest
+        with open(manifest_path, encoding="utf-8") as fh:
+            existing = json.load(fh)
+        existing_ids = {n["id"] for n in existing["nodes"]}
+        for node in manifest["nodes"]:
+            if node["id"] not in existing_ids:
+                existing["nodes"].append(node)
+        existing["edges"].extend(manifest["edges"])
+        existing["version"] = existing.get("version", 1) + 1
+        existing["updated"] = today
+        existing.setdefault("search_profile", {})["updated"] = today
+        with open(manifest_path, "w", encoding="utf-8") as fh:
+            json.dump(existing, fh, indent=2)
+    else:
+        # BUILD: write the fresh manifest as-is
+        with open(manifest_path, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, indent=2)
+
     with open(os.path.join(args.kg_folder, "_judgments.json"), "w", encoding="utf-8") as fh:
         json.dump(judgments_from_input(raw["nodes"], nodes), fh, indent=2)
     print(f"Assembled {len(nodes)} nodes → {args.kg_folder}")
