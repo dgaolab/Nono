@@ -21,7 +21,7 @@ def _run(*args):
 
 def build_run_record(*, kg_name, mode, version, timestamp, nodes_created,
                      refs_added, passed, failed, since_date=None):
-    run_id = timestamp.replace(":", "").replace("-", "") + f"-v{version}"
+    run_id = timestamp.replace(":", "") + f"-v{version}"
     return {"run_id": run_id, "kg_name": kg_name, "mode": mode, "timestamp": timestamp,
             "version": version, "since_date": since_date,
             "nodes_created": nodes_created, "nodes_revised": [],
@@ -59,7 +59,7 @@ def _refs_added(kg_folder, node_ids):
 
 
 def finalize_kg(kg_folder, *, mode, version, candidates_path=None,
-                since_date=None, overview_text=None, run_subprocess=True):
+                since_date=None, overview_text=None):
     candidates_path = candidates_path or os.path.join(kg_folder, "_candidates.json")
     with open(os.path.join(kg_folder, "manifest.json"), encoding="utf-8") as fh:
         manifest = json.load(fh)
