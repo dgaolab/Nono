@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/cost_report.py --hook"
+            "command": "python3 src/nono_librarian/cli/cost_report.py --hook"
           }
         ]
       }
