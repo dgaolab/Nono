@@ -33,6 +33,10 @@ test -d "$NONO_HOME/Nono" || git clone git@github.com:dgaolab/Nono.git "$NONO_HO
 ln -sfn "$NONO_HOME/Nono/pi" "$NONO_HOME/pi"
 ln -sfn "$NONO_HOME/Nono/librarian" "$NONO_HOME/librarian"
 uv pip install --python "$NONO_HOME/.venv" -e "$NONO_HOME/pi" -e "$NONO_HOME/librarian"
+mkdir -p "$HOME/.claude/skills"
+SKILL_LINK="$HOME/.claude/skills/nono-pi"
+[ -L "$SKILL_LINK" ] || rm -rf "$SKILL_LINK"   # replace a stale real dir
+ln -sfn "$NONO_HOME/pi/.claude/skills/nono-pi" "$SKILL_LINK"
 ```
 
 Let `P="$NONO_HOME/.venv/bin/nono-pi"` and `N="$NONO_HOME/.venv/bin/nono-librarian"`.
