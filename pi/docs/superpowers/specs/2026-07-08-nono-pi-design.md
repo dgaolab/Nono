@@ -23,6 +23,12 @@ investigator / orchestrator**. Given a research goal and supporting material, it
 6. Uses the **corresponding writing skills** to draft the grant or paper, at a
    **depth the user chooses per run** (specific sections or a full draft).
 
+If the user supplies an **existing draft** of the deliverable, `nono-pi` runs in
+**revise mode**: it digests the current version and improves it against the KG
+evidence rather than writing from scratch. If no draft is supplied, it runs in
+**create mode**. The mode is auto-detected and confirmed with the user, never
+guessed silently.
+
 `nono-pi` MUST be **model-agnostic** — runnable by Claude, another frontier
 model, or a locally-hosted agent — built the **same way as `nono-librarian`**.
 
@@ -105,11 +111,18 @@ pi/
 - **Step 0.5 — Resume-or-start.** If invoked against an existing output folder,
   run `nono-pi status <out>` first (see §8) and resume; otherwise start fresh.
 - **Step 1 — Intake.** Agent asks the user for: (a) output folder, (b) brief
-  goal description, (c) additional input files incl. preliminary data.
-  Deterministic: `nono-pi init <out>` scaffolds the folder; `nono-pi intake`
-  records `intake.json` and copies the user's files into `<out>/input/`.
-- **Step 2 — Document type.** Agent auto-detects grant vs paper from the goal,
-  **asks the user to confirm**; recorded in `intake.json`.
+  goal description, (c) additional input files incl. preliminary data, and
+  optionally an existing draft of the deliverable. Deterministic: `nono-pi init
+  <out>` scaffolds the folder; `nono-pi intake` records `intake.json` and copies
+  the user's files into `<out>/input/` (originals preserved, untouched).
+- **Step 1.5 — Mode.** Agent classifies each provided file as *supporting
+  material* vs *an existing draft of the deliverable*, auto-detects the run
+  **mode** (`create` if no draft, `revise` if a draft is present), and **asks
+  the user to confirm**; recorded in `intake.json`. In `revise` mode the ingested
+  draft is copied to `<out>/draft/v000.<ext>` as the immutable baseline.
+- **Step 2 — Document type.** Agent auto-detects grant vs paper from the goal
+  (or from the provided draft in `revise` mode), **asks the user to confirm**;
+  recorded in `intake.json`.
 - **Step 3 — Deliverable depth.** Agent asks which sections / what depth to
   write (e.g. Specific Aims only, Results only, or full draft); recorded.
 - **Step 4 — Subtopic decomposition.** Agent reads goal + input and writes
@@ -133,25 +146,39 @@ pi/
   - **Else / after user confirms:** continue.
 - **Step 7 — Significance & Innovation.** Agent synthesizes S&I from goal +
   input + KG evidence; `nono-pi assemble-si` writes
-  `<out>/Significance_and_Innovation.md`.
-- **Step 8 — Write.** Load the hard-coded routing table for the doc type, filter
-  to the chosen depth/sections, and the agent follows each referenced skill's
-  markdown (by path) to write sections into `<out>/draft/`.
+  `<out>/Significance_and_Innovation.md`. In `revise` mode the agent instead
+  *evaluates the existing draft's* significance/innovation claims against the KG
+  evidence — flagging claims that are unsupported, overstated, or already
+  published — rather than inventing fresh ones.
+- **Step 8 — Write / revise.** Load the hard-coded routing table for the doc
+  type, filter to the chosen depth/sections, and select the column for the mode:
+  - **`create`:** the agent follows each section skill's markdown (by path) to
+    write sections into `<out>/draft/` (`vNNN` files).
+  - **`revise`:** the agent runs the revise-oriented skills — critique/plan then
+    targeted edit — improving the baseline (`v000`) into a new version
+    (`v001`, …), addressing gap-gate findings and unsupported S&I claims while
+    preserving the draft's strengths. Only the chosen sections are touched.
 
 ## 6. Skill routing tables (hard-coded, `data/routing/`)
 
-Each table maps **section → skill**, so the Step 3 depth choice selects which
-entries run.
+Each table maps **section → { create: skill, revise: skill(s) }**, so the Step 3
+depth choice selects which entries run and the Step 1.5 mode selects the column.
 
-- **grant.json** → `grant-specific-aims-writer`, `grant-proposal-assistant`,
-  `research-proposal-generator` (+ `nsfc-grant-writer` when NSFC).
-- **paper.json** → `introduction-section-writer`, `methods-section-writer`,
-  `results-section-writer`, `discussion-composer`, `abstract-summarizer`
-  (+ figure/reference helpers).
+- **grant.json**
+  - *create* → `grant-specific-aims-writer`, `grant-proposal-assistant`,
+    `research-proposal-generator` (+ `nsfc-grant-writer` when NSFC).
+  - *revise* → `grant-mock-reviewer` → `revision-strategy-planner` →
+    `grant-specific-aims-writer` (edit mode) / `grant-proposal-assistant`.
+- **paper.json**
+  - *create* → `introduction-section-writer`, `methods-section-writer`,
+    `results-section-writer`, `discussion-composer`, `abstract-summarizer`
+    (+ figure/reference helpers).
+  - *revise* → `scientific-manuscript-review` / `sci-paper-reviewer` →
+    `revision-strategy-planner` → the section writers in edit mode.
 
 Tables are data, not code, so the curated set can be edited without touching the
 CLI. `lib/routing.py` loads a table and returns the subset matching the requested
-sections.
+sections **and** the selected mode column.
 
 ## 7. Output folder layout (the durable memory)
 
@@ -165,7 +192,8 @@ sections.
   Significance_and_Innovation.md
   gaps_report.md               # only if gaps found
   analysis_plan.md             # only if further analysis suggested (nono-analyst input)
-  draft/                       # written grant/paper sections
+  draft/                       # versioned grant/paper sections/drafts (v000, v001, …)
+                               #   revise mode: v000 = ingested original (immutable)
   pi_run.json                  # progress ledger (plan + state)
 ```
 
@@ -175,10 +203,10 @@ sections.
 source of truth**. Nothing required to continue lives in the session.
 
 - **`pi_run.json` is a progress ledger** recording the plan and state: intake,
-  confirmed doc type, requested sections + chosen depth, subtopics, per-KG build
-  status, gap-gate outcome (including the user's confirm/override decision),
-  Significance & Innovation status, and **per-section draft status**
-  (`requested` / `written`).
+  confirmed doc type, **run mode (`create`/`revise`) and current draft version**,
+  requested sections + chosen depth, subtopics, per-KG build status, gap-gate
+  outcome (including the user's confirm/override decision), Significance &
+  Innovation status, and **per-section draft status** (`requested` / `written`).
 - **`nono-pi status <out>`** reconciles the ledger against what actually exists
   on disk — which `kgs/<slug>/` folders are built, whether
   `Significance_and_Innovation.md` exists, which files are present in `draft/` —
@@ -215,10 +243,12 @@ scaffolding around them is fully covered.
 
 ## 11. Scope (be honest)
 
-- **In scope:** intake, subtopic decomposition, KG orchestration via the
-  librarian, the logic-gap gate + further-analysis-plan emission, Significance &
-  Innovation authoring, depth-selected grant/paper drafting via a curated skill
-  table, and full resumability from the output folder.
+- **In scope:** intake (incl. ingesting an existing draft), subtopic
+  decomposition, KG orchestration via the librarian, the logic-gap gate +
+  further-analysis-plan emission, Significance & Innovation authoring,
+  depth-selected grant/paper drafting via a curated skill table in both `create`
+  and `revise` modes, versioned drafts, and full resumability from the output
+  folder.
 - **Out of scope / placeholder:** `nono-analyst` (consumes `analysis_plan.md`)
   is **not built** — `nono-pi` only emits the plan file. KG quality is bounded by
   `nono-librarian` and by whichever agent runs the program.
