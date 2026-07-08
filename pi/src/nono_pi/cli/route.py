@@ -19,7 +19,12 @@ def resolve(out_dir, *, sections=None, full=False):
         raise ValueError(f"unknown sections for {doc_type}: {unknown}")
     plan = R.select(table, chosen, mode)
     led["depth"] = "full" if full else "sections"
-    led["requested_sections"] = [p["section"] for p in plan]
+    new_sections = [p["section"] for p in plan]
+    if full:
+        led["requested_sections"] = new_sections
+    else:
+        led["requested_sections"] = list(dict.fromkeys(
+            led.get("requested_sections", []) + new_sections))
     led.setdefault("sections", {})
     for p in plan:
         led["sections"].setdefault(p["section"], "requested")

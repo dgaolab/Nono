@@ -95,9 +95,9 @@ pi/
       ledger.py                      # read/write/reconcile pi_run.json
       routing.py                     # load + filter routing tables by depth
     data/
-      templates/                     # significance_innovation, gaps_report, analysis_plan
+      templates/                     # significance_innovation, analysis_plan
       routing/                       # grant.json, paper.json (curated skill routing)
-      schemas/                       # intake, subtopics, si_input, gaps_input schemas
+      schemas/                       # intake, subtopics, si_input, analysis_input, pi_run
   tests/
     unit/                            # pytest over deterministic CLI only
     fixtures/
