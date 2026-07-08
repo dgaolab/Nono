@@ -34,9 +34,15 @@ def record_intake(out_dir, *, goal, doc_type, mode, files=(), draft=None):
     if mode == "revise":
         if not draft:
             raise ValueError("revise mode requires a draft file")
-        ext = os.path.splitext(draft)[1] or ".md"
-        shutil.copy2(draft, os.path.join(draft_dir, f"v000{ext}"))
-        draft_rel = os.path.join("draft", f"v000{ext}")
+        # Preserve the immutable baseline: never overwrite an existing v000.
+        existing = ([n for n in os.listdir(draft_dir) if n.startswith("v000.")]
+                    if os.path.isdir(draft_dir) else [])
+        if existing:
+            draft_rel = os.path.join("draft", sorted(existing)[0])
+        else:
+            ext = os.path.splitext(draft)[1] or ".md"
+            shutil.copy2(draft, os.path.join(draft_dir, f"v000{ext}"))
+            draft_rel = os.path.join("draft", f"v000{ext}")
 
     payload = {"goal": goal, "doc_type": doc_type, "mode": mode,
                "input_files": copied, "draft_file": draft_rel}
