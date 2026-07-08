@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nono-pi progress ledger",
+  "type": "object",
+  "required": ["schema_version", "goal", "doc_type", "mode", "kg_status",
+               "gap_gate", "si_status"],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 1},
+    "out_dir": {"type": "string"},
+    "goal": {"type": "string"},
+    "doc_type": {"type": ["string", "null"], "enum": ["grant", "paper", null]},
+    "mode": {"type": ["string", "null"], "enum": ["create", "revise", null]},
+    "depth": {"type": ["string", "null"], "enum": ["full", "sections", null]},
+    "draft_version": {"type": "integer", "minimum": 0},
+    "requested_sections": {"type": "array", "items": {"type": "string"}},
+    "subtopics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slug", "title"],
+        "properties": {"slug": {"type": "string"}, "title": {"type": "string"}}
+      }
+    },
+    "kg_status": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "enum": ["pending", "built", "failed"]}
+    },
+    "gap_gate": {
+      "type": "object",
+      "required": ["status", "decision"],
+      "properties": {
+        "status": {"type": "string", "enum": ["pending", "gaps", "clear", "confirmed"]},
+        "decision": {"type": ["string", "null"]}
+      }
+    },
+    "si_status": {"type": "string", "enum": ["pending", "done"]},
+    "sections": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "enum": ["requested", "written"]}
+    }
+  }
+}

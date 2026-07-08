@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nono-pi intake record",
+  "type": "object",
+  "required": ["goal", "doc_type", "mode", "input_files", "draft_file"],
+  "properties": {
+    "goal": {"type": "string", "minLength": 1},
+    "doc_type": {"type": "string", "enum": ["grant", "paper"]},
+    "mode": {"type": "string", "enum": ["create", "revise"]},
+    "input_files": {"type": "array", "items": {"type": "string"}},
+    "draft_file": {"type": ["string", "null"]}
+  }
+}

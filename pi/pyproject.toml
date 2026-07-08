@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nono-pi"
+version = "0.1.0"
+description = "Agent-driven PI orchestrator for Nono (grant/paper authoring over librarian KGs)"
+requires-python = ">=3.14"
+dependencies = [
+    "jsonschema>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+nono-pi = "nono_pi.cli.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"nono_pi.data" = ["templates/*", "schemas/*", "routing/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

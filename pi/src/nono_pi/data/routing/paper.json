@@ -1,0 +1,30 @@
+{
+  "order": ["abstract", "introduction", "methods", "results", "discussion"],
+  "sections": {
+    "abstract": {
+      "title": "Abstract",
+      "create": ["abstract-summarizer"],
+      "revise": ["scientific-manuscript-review", "abstract-summarizer"]
+    },
+    "introduction": {
+      "title": "Introduction",
+      "create": ["introduction-section-writer"],
+      "revise": ["scientific-manuscript-review", "revision-strategy-planner", "introduction-section-writer"]
+    },
+    "methods": {
+      "title": "Methods",
+      "create": ["methods-section-writer"],
+      "revise": ["sci-paper-reviewer", "methods-section-writer"]
+    },
+    "results": {
+      "title": "Results",
+      "create": ["results-section-writer"],
+      "revise": ["sci-paper-reviewer", "revision-strategy-planner", "results-section-writer"]
+    },
+    "discussion": {
+      "title": "Discussion",
+      "create": ["discussion-composer"],
+      "revise": ["scientific-manuscript-review", "discussion-composer"]
+    }
+  }
+}
