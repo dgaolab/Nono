@@ -1,0 +1,25 @@
+{
+  "order": ["specific_aims", "significance", "innovation", "approach"],
+  "sections": {
+    "specific_aims": {
+      "title": "Specific Aims",
+      "create": ["grant-specific-aims-writer"],
+      "revise": ["grant-mock-reviewer", "revision-strategy-planner", "grant-specific-aims-writer"]
+    },
+    "significance": {
+      "title": "Significance",
+      "create": ["grant-proposal-assistant"],
+      "revise": ["grant-mock-reviewer", "grant-proposal-assistant"]
+    },
+    "innovation": {
+      "title": "Innovation",
+      "create": ["grant-proposal-assistant"],
+      "revise": ["grant-mock-reviewer", "grant-proposal-assistant"]
+    },
+    "approach": {
+      "title": "Approach",
+      "create": ["research-proposal-generator", "grant-proposal-assistant"],
+      "revise": ["revision-strategy-planner", "grant-proposal-assistant"]
+    }
+  }
+}
