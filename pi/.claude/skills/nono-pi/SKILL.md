@@ -107,26 +107,53 @@ nono-pi mark <out> --kg <slug> --kg-status built     # or failed
 `nono-pi status <out>` also detects built KGs from disk (presence of
 `manifest.json`), so a resumed run knows what remains.
 
-## Step 5 — Logic / gap gate
+## Step 4.5 — Score KG evidence strength
 
-Read the KGs and check the user's goal for logic mistakes or gaps, grounded in
-KG evidence. Write your findings to `<out>/gaps_report.md`.
+Before evaluating the premise, compute deterministic evidence-strength scores so
+your judgment is calibrated (not hand-wavy):
 
-- **If a gap is closable by further analysis**, also emit a machine-readable
-  plan for the future `nono-analyst` module:
-  ```bash
-  nono-pi analysis-plan <out> --input <analysis_input.json>
-  ```
-- **If gaps exist, HALT.** Present them and the suggested analysis plan, mark the
-  gate, and wait for the user to revise the goal or explicitly confirm/override:
-  ```bash
-  nono-pi mark <out> --gate gaps        # gaps found; awaiting the user
-  nono-pi mark <out> --gate confirmed   # user chose to proceed
-  ```
-- **If no blocking gaps**, mark the gate clear and continue:
-  ```bash
-  nono-pi mark <out> --gate clear
-  ```
+```bash
+nono-pi evidence-score <out>          # all built KGs → kgs/<slug>/_evidence_score.json
+```
+
+Read the scores; weight weakly-supported claims (low tier, single source,
+quarantined) accordingly in the aims loop below.
+
+## Step 5 — Aims loop (evaluate the hypothesis until it is sound)
+
+Iterate on the hypothesis + Specific Aims, **halting for the user every round**.
+In `revise` mode, evaluate the **existing** premise extracted from the ingested
+draft rather than inventing one.
+
+Each round:
+
+1. **Evaluate** the current hypothesis/aims against the KGs across four lenses —
+   *soundness/logic*, *novelty*, *significance*, *contradiction-check* — grounded
+   in the KG nodes and the evidence-strength scores. Every verdict MUST cite KG
+   node IDs / PMIDs; a claim with no citable basis cannot pass. Write a round
+   JSON (`{"verdicts": {lens: {"verdict","rationale","citations",…}}, "weaknesses":
+   [...], "proposed_revision": "..."}`) and record it:
+   ```bash
+   nono-pi eval record <out> --loop aims --input <round.json>
+   ```
+2. **Gap handoff:** if a weakness is closable only by further analysis, also emit
+   the `nono-analyst` plan and note the gap gate:
+   ```bash
+   nono-pi analysis-plan <out> --input <analysis_input.json>
+   nono-pi mark <out> --gate gaps
+   ```
+   Write `<out>/gaps_report.md` when the premise is contradicted or gapped.
+3. **HALT.** Present the round's verdicts + proposed revision (they are rendered
+   in `<out>/aims_evaluation.md`) and wait. Record the user's choice:
+   ```bash
+   nono-pi eval decide <out> --loop aims --decision approved   # apply revision, loop again
+   nono-pi eval decide <out> --loop aims --decision accepted    # premise sound → continue
+   nono-pi eval decide <out> --loop aims --decision stopped     # stop here
+   ```
+   On `approved`, revise the hypothesis/aims and start the next round. On
+   `accepted` (mark the gate clear: `nono-pi mark <out> --gate clear`) continue to
+   Step 6. A **review-only task** stops here: the rendered `aims_evaluation.md` is
+   the deliverable.
 
 ## Step 6 — Significance & Innovation
 
@@ -155,6 +182,35 @@ For an NSFC grant, also follow the `nsfc-grant-writer` skill in addition to the
 routed grant skills.
 
 Finish by printing `nono-pi status <out>` so the user sees the completed state.
+
+## Step 8.5 — Draft loop (review and refine the deliverable)
+
+Refine the drafted deliverable with the same halt-each-round loop, driven by the
+routed review skills. This loop is **mode-agnostic**: in `create` mode its seed
+is the freshly written draft from Step 7; in `revise` mode its seed is the
+ingested `draft/v000.<ext>` — i.e. revise mode's improvement *is* this loop, not
+a separate pass.
+
+Each round:
+
+1. **Review** the current draft with the routed skills (grants:
+   `grant-mock-reviewer`; papers: `scientific-manuscript-review` /
+   `sci-paper-reviewer`) — reviewer simulation + coherence (does it test the
+   hypothesis, aims↔methods coherence), grounded in the KGs and S&I. Record it:
+   ```bash
+   nono-pi eval record <out> --loop draft --input <round.json>
+   ```
+2. **HALT** and record the decision:
+   ```bash
+   nono-pi eval decide <out> --loop draft --decision approved   # apply, loop again
+   nono-pi eval decide <out> --loop draft --decision accepted    # done
+   nono-pi eval decide <out> --loop draft --decision stopped
+   ```
+   On `approved`, apply the routed revise-column skills and write the next version
+   (`create`: update `draft/<section_key>.md`; `revise`: new `draft/v<NNN>.md`,
+   never touching `v000`), then `nono-pi mark <out> --bump-draft` and loop again.
+
+Finish by printing `nono-pi status <out>`.
 
 ## Scope (be honest)
 

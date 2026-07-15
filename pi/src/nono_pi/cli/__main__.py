@@ -12,6 +12,8 @@ COMMANDS = {
     "analysis-plan": "analysis_plan",
     "status": "status",
     "mark": "mark",
+    "eval": "eval",
+    "evidence-score": "evidence_score",
 }
 
 
