@@ -37,6 +37,30 @@
     "sections": {
       "type": "object",
       "additionalProperties": {"type": "string", "enum": ["requested", "written"]}
+    },
+    "aims_loop": {"$ref": "#/$defs/loop"},
+    "draft_loop": {"$ref": "#/$defs/loop"}
+  },
+  "$defs": {
+    "loop": {
+      "type": "object",
+      "required": ["status", "rounds"],
+      "properties": {
+        "status": {"type": "string", "enum": ["pending", "in_progress", "accepted", "stopped"]},
+        "rounds": {"type": "array", "items": {"$ref": "#/$defs/round"}}
+      }
+    },
+    "round": {
+      "type": "object",
+      "required": ["round", "decision"],
+      "properties": {
+        "round": {"type": "integer", "minimum": 0},
+        "verdicts": {"type": "object"},
+        "weaknesses": {"type": "array"},
+        "proposed_revision": {"type": "string"},
+        "decision": {"type": ["string", "null"], "enum": ["approved", "accepted", "stopped", null]},
+        "note": {"type": ["string", "null"]}
+      }
     }
   }
 }

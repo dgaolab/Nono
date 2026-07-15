@@ -25,6 +25,8 @@ def new_ledger(out_dir=""):
         "gap_gate": {"status": "pending", "decision": None},
         "si_status": "pending",
         "sections": {},
+        "aims_loop": {"status": "pending", "rounds": []},
+        "draft_loop": {"status": "pending", "rounds": []},
     }
 
 
