@@ -61,3 +61,16 @@ def test_record_intake_revise_preserves_existing_baseline(tmp_path):
 def test_main_rejects_missing_output_folder(tmp_path):
     assert main([str(tmp_path / "nope"), "--goal", "g", "--doc-type", "grant",
                  "--mode", "create"]) == 2
+
+
+def test_main_rejects_missing_input_file(tmp_path):
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    assert main([str(out), "--goal", "g", "--doc-type", "grant", "--mode", "create",
+                 "--file", str(tmp_path / "nope.md")]) == 2
+
+
+def test_main_revise_without_draft_returns_2(tmp_path):
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    assert main([str(out), "--goal", "g", "--doc-type", "grant", "--mode", "revise"]) == 2

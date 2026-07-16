@@ -1,6 +1,8 @@
 import json
 import os
 
+import pytest
+
 from nono_pi.lib import ledger as L
 
 
@@ -52,3 +54,17 @@ def test_reconcile_create_sections_and_revise_version(tmp_path):
     (tmp_path / "draft" / "v002.md").write_text("rev2")
     L.reconcile(str(tmp_path), led2)
     assert led2["draft_version"] == 2
+
+
+def test_validate_ledger_rejects_bad_enum():
+    led = L.new_ledger("/out")
+    led["doc_type"] = "thesis"  # not in enum grant|paper|null
+    with pytest.raises(Exception):
+        L.validate_ledger(led)
+
+
+def test_validate_ledger_rejects_missing_required():
+    led = L.new_ledger("/out")
+    del led["gap_gate"]  # a top-level required key
+    with pytest.raises(Exception):
+        L.validate_ledger(led)
