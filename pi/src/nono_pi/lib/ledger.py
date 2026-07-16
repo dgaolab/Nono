@@ -3,6 +3,7 @@ import json
 import os
 import re
 
+from nono_pi.lib import schema as _schema
 from nono_pi.paths import data_file
 
 LEDGER_NAME = "pi_run.json"
@@ -76,7 +77,4 @@ def reconcile(out_dir, ledger):
 
 
 def validate_ledger(ledger):
-    import jsonschema
-    with open(_SCHEMA, encoding="utf-8") as fh:
-        schema = json.load(fh)
-    jsonschema.Draft202012Validator(schema).validate(ledger)
+    _schema.validate(_SCHEMA, ledger)

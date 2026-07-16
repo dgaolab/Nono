@@ -11,6 +11,7 @@ import re
 import sys
 
 from nono_pi.lib import ledger as L
+from nono_pi.lib import schema
 from nono_pi.paths import data_file
 
 _SCHEMA = data_file("schemas", "subtopics_schema.json")
@@ -21,15 +22,8 @@ def _slugify(text):
     return s or "topic"
 
 
-def _validate(doc):
-    import jsonschema
-    with open(_SCHEMA, encoding="utf-8") as fh:
-        schema = json.load(fh)
-    jsonschema.Draft202012Validator(schema).validate(doc)
-
-
 def plan_kgs(out_dir, subtopics_doc):
-    _validate(subtopics_doc)
+    schema.validate(_SCHEMA, subtopics_doc)
     kgs = []
     for st in subtopics_doc["subtopics"]:
         slug = st.get("slug") or _slugify(st["title"])

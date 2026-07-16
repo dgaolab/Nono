@@ -6,17 +6,11 @@ import shutil
 import sys
 
 from nono_pi.lib import ledger as L
+from nono_pi.lib import schema
 from nono_pi.paths import data_file
 
 INTAKE_NAME = "intake.json"
 _SCHEMA = data_file("schemas", "intake_schema.json")
-
-
-def _validate(payload):
-    import jsonschema
-    with open(_SCHEMA, encoding="utf-8") as fh:
-        schema = json.load(fh)
-    jsonschema.Draft202012Validator(schema).validate(payload)
 
 
 def record_intake(out_dir, *, goal, doc_type, mode, files=(), draft=None):
@@ -46,7 +40,7 @@ def record_intake(out_dir, *, goal, doc_type, mode, files=(), draft=None):
 
     payload = {"goal": goal, "doc_type": doc_type, "mode": mode,
                "input_files": copied, "draft_file": draft_rel}
-    _validate(payload)
+    schema.validate(_SCHEMA, payload)
     with open(os.path.join(out_dir, INTAKE_NAME), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)
 
