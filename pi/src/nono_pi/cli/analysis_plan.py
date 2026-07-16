@@ -3,18 +3,12 @@ import argparse
 import json
 import os
 
+from nono_pi.lib import schema
 from nono_pi.paths import data_file
 
 _SCHEMA = data_file("schemas", "analysis_input_schema.json")
 _TEMPLATE = data_file("templates", "analysis_plan.md")
 OUT_NAME = "analysis_plan.md"
-
-
-def _validate(doc):
-    import jsonschema
-    with open(_SCHEMA, encoding="utf-8") as fh:
-        schema = json.load(fh)
-    jsonschema.Draft202012Validator(schema).validate(doc)
 
 
 def render_plan(doc):
@@ -34,7 +28,7 @@ def render_plan(doc):
 
 
 def write_analysis_plan(out_dir, doc):
-    _validate(doc)
+    schema.validate(_SCHEMA, doc)
     md = render_plan(doc)
     path = os.path.join(out_dir, OUT_NAME)
     with open(path, "w", encoding="utf-8") as fh:

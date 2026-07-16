@@ -4,6 +4,7 @@ import json
 import os
 
 from nono_pi.lib import ledger as L
+from nono_pi.lib import schema
 from nono_pi.paths import data_file
 
 _SCHEMA = data_file("schemas", "eval_round_schema.json")
@@ -13,13 +14,6 @@ LOOPS = ("aims", "draft")
 
 def _loop_key(loop):
     return f"{loop}_loop"
-
-
-def _validate_round(doc):
-    import jsonschema
-    with open(_SCHEMA, encoding="utf-8") as fh:
-        schema = json.load(fh)
-    jsonschema.Draft202012Validator(schema).validate(doc)
 
 
 def _render_report(out_dir, loop, lp):
@@ -43,7 +37,7 @@ def _render_report(out_dir, loop, lp):
 
 
 def record_round(out_dir, loop, round_input):
-    _validate_round(round_input)
+    schema.validate(_SCHEMA, round_input)
     led = L.read_ledger(out_dir)
     lp = led.setdefault(_loop_key(loop), {"status": "pending", "rounds": []})
     rnd = {

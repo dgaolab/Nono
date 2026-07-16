@@ -4,18 +4,12 @@ import json
 import os
 
 from nono_pi.lib import ledger as L
+from nono_pi.lib import schema
 from nono_pi.paths import data_file
 
 _SCHEMA = data_file("schemas", "si_input_schema.json")
 _TEMPLATE = data_file("templates", "significance_innovation.md")
 OUT_NAME = "Significance_and_Innovation.md"
-
-
-def _validate(doc):
-    import jsonschema
-    with open(_SCHEMA, encoding="utf-8") as fh:
-        schema = json.load(fh)
-    jsonschema.Draft202012Validator(schema).validate(doc)
 
 
 def _bullets(items):
@@ -41,7 +35,7 @@ def render_si(doc):
 
 
 def assemble_si(out_dir, doc):
-    _validate(doc)
+    schema.validate(_SCHEMA, doc)
     md = f"# Significance and Innovation — {doc['title']}\n\n" + render_si(doc).split("\n", 2)[2]
     path = os.path.join(out_dir, OUT_NAME)
     with open(path, "w", encoding="utf-8") as fh:
