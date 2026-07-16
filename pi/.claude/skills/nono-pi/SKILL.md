@@ -183,7 +183,7 @@ routed grant skills.
 
 Finish by printing `nono-pi status <out>` so the user sees the completed state.
 
-## Step 8.5 — Draft loop (review and refine the deliverable)
+## Step 7.5 — Draft loop (review and refine the deliverable)
 
 Refine the drafted deliverable with the same halt-each-round loop, driven by the
 routed review skills. This loop is **mode-agnostic**: in `create` mode its seed
@@ -208,15 +208,17 @@ Each round:
    ```
    On `approved`, apply the routed revise-column skills and write the next version
    (`create`: update `draft/<section_key>.md`; `revise`: new `draft/v<NNN>.md`,
-   never touching `v000`), then `nono-pi mark <out> --bump-draft` and loop again.
+   never touching `v000`), then `nono-pi mark <out> --bump-draft` and loop again. A
+   **review-only task** can stop after round 0: the rendered `<out>/draft_evaluation.md`
+   is the deliverable.
 
 Finish by printing `nono-pi status <out>`.
 
 ## Scope (be honest)
 
 - **In scope:** intake (incl. ingesting an existing draft), subtopic
-  decomposition, KG orchestration via `nono-librarian`, the logic-gap gate +
-  `nono-analyst` plan emission, Significance & Innovation authoring,
+  decomposition, KG orchestration via `nono-librarian`, the aims loop (absorbing
+  the logic-gap gate) + `nono-analyst` plan emission, Significance & Innovation authoring,
   depth-selected grant/paper drafting/revision, versioned drafts, and full
   resumability from the output folder.
 - **Placeholder:** `nono-analyst` (consumes `analysis_plan.md`) is not built yet

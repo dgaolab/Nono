@@ -58,3 +58,22 @@ def test_record_rejects_bad_round(tmp_path):
     scaffold(str(out))
     with pytest.raises(Exception):
         record_round(str(out), "aims", {"weaknesses": [], "proposed_revision": "x"})  # no verdicts
+
+
+def test_decide_stopped_sets_loop_status(tmp_path):
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    record_round(str(out), "draft", _round())
+    decide_round(str(out), "draft", "stopped")
+    import json
+    led = json.loads((out / "pi_run.json").read_text())
+    assert led["draft_loop"]["status"] == "stopped"
+    assert led["draft_loop"]["rounds"][-1]["decision"] == "stopped"
+
+
+def test_recorded_round_keeps_ledger_schema_valid(tmp_path):
+    from nono_pi.lib import ledger as L
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    record_round(str(out), "aims", _round())
+    L.validate_ledger(L.read_ledger(str(out)))  # must not raise
