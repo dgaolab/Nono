@@ -9,6 +9,18 @@ def _fmt_kgs(led):
     return "\n".join(lines) if lines else "  (none planned)"
 
 
+def _fmt_loop(led, key, label):
+    lp = led.get(key)
+    if not lp:
+        return None
+    lines = [f"  {label}: {lp.get('status', 'pending')}"]
+    for rnd in lp.get("rounds", []):
+        dims = ", ".join(f"{d}={v.get('verdict')}"
+                         for d, v in rnd.get("verdicts", {}).items())
+        lines.append(f"    round {rnd.get('round')}: [{dims}] decision={rnd.get('decision')}")
+    return "\n".join(lines)
+
+
 def status_report(out_dir):
     led = L.reconcile(out_dir, L.read_ledger(out_dir))
     L.write_ledger(out_dir, led)
@@ -26,6 +38,10 @@ def status_report(out_dir):
     else:
         for key in led.get("requested_sections", []):
             lines.append(f"  section {key}: {led.get('sections', {}).get(key, 'requested')}")
+    for key, label in (("aims_loop", "aims loop"), ("draft_loop", "draft loop")):
+        block = _fmt_loop(led, key, label)
+        if block:
+            lines.append(block)
     return "\n".join(lines), led
 
 

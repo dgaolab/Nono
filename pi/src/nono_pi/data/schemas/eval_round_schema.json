@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "nono-pi evaluation round input",
+  "type": "object",
+  "required": ["verdicts", "weaknesses", "proposed_revision"],
+  "properties": {
+    "verdicts": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["verdict", "rationale", "citations"],
+        "properties": {
+          "verdict": {"type": "string", "enum": ["sound", "weak", "contradicted", "unclear"]},
+          "score": {"type": ["number", "null"]},
+          "rationale": {"type": "string", "minLength": 1},
+          "citations": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "weaknesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["issue", "fix"],
+        "properties": {
+          "issue": {"type": "string"},
+          "dimension": {"type": "string"},
+          "fix": {"type": "string"},
+          "closable_by_analysis": {"type": "boolean"}
+        }
+      }
+    },
+    "proposed_revision": {"type": "string"}
+  }
+}
