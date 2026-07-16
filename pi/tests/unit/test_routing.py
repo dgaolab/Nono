@@ -63,3 +63,14 @@ def test_resolve_sections_merges_across_calls(tmp_path):
     resolve(str(out), full=True)
     led2 = json.loads((out / "pi_run.json").read_text())
     assert led2["requested_sections"] == ["specific_aims", "significance", "innovation", "approach"]
+
+
+def test_resolve_sections_records_depth_and_status(tmp_path):
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    record_intake(str(out), goal="g", doc_type="grant", mode="create")
+    resolve(str(out), sections=["approach"])
+    led = json.loads((out / "pi_run.json").read_text())
+    assert led["depth"] == "sections"
+    assert led["requested_sections"] == ["approach"]
+    assert led["sections"]["approach"] == "requested"

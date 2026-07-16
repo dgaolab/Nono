@@ -77,3 +77,27 @@ def test_recorded_round_keeps_ledger_schema_valid(tmp_path):
     scaffold(str(out))
     record_round(str(out), "aims", _round())
     L.validate_ledger(L.read_ledger(str(out)))  # must not raise
+
+
+def test_record_rejects_invalid_verdict_enum(tmp_path):
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    bad = {
+        "verdicts": {"soundness": {"verdict": "great", "rationale": "x", "citations": []}},
+        "weaknesses": [],
+        "proposed_revision": "y",
+    }
+    with pytest.raises(Exception):  # "great" not in enum sound|weak|contradicted|unclear
+        record_round(str(out), "aims", bad)
+
+
+def test_record_rejects_non_list_citations(tmp_path):
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    bad = {
+        "verdicts": {"soundness": {"verdict": "weak", "rationale": "x", "citations": "node_1"}},
+        "weaknesses": [],
+        "proposed_revision": "y",
+    }
+    with pytest.raises(Exception):  # citations must be an array
+        record_round(str(out), "aims", bad)
