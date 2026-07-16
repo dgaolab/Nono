@@ -11,7 +11,9 @@ def _fmt_kgs(led):
 
 def _fmt_loop(led, key, label):
     lp = led.get(key)
-    if not lp:
+    # Skip untouched loops (pending, no rounds) so a fresh project prints no
+    # loop lines; the section appears once the first round is recorded.
+    if not lp or (lp.get("status") == "pending" and not lp.get("rounds")):
         return None
     lines = [f"  {label}: {lp.get('status', 'pending')}"]
     for rnd in lp.get("rounds", []):

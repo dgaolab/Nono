@@ -21,6 +21,20 @@ def test_status_shows_loop_rounds(tmp_path):
     assert "soundness=sound" in report
 
 
+def test_status_hides_untouched_loops_on_fresh_project(tmp_path):
+    out = tmp_path / "proj"
+    scaffold(str(out))
+    record_intake(str(out), goal="g", doc_type="grant", mode="create")
+    report, _ = status_report(str(out))
+    # a fresh project has seeded-but-untouched loops → no loop lines
+    assert "aims loop:" not in report
+    assert "draft loop:" not in report
+    # ...but once a round is recorded, the section appears
+    record_round(str(out), "aims", _round())
+    report2, _ = status_report(str(out))
+    assert "aims loop: in_progress" in report2
+
+
 def test_status_ok_when_loops_absent(tmp_path):
     # An old-style ledger without loop keys must not break status.
     out = tmp_path / "proj"
