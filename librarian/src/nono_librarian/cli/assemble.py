@@ -86,6 +86,10 @@ def main(argv=None):
         write_node(os.path.join(nodes_dir, n["file"]), fm, body)
 
     kg_name = os.path.basename(os.path.normpath(args.kg_folder))
+    if not kg_name.startswith("KG_"):
+        # manifest schema requires the KG_ prefix; callers (e.g. nono-pi
+        # orchestrate-kg) may name folders with a plain slug instead.
+        kg_name = "KG_" + kg_name
     manifest = build.assemble_manifest(kg_name, args.topic, args.breadth,
                                        raw.get("sub_queries", []), nodes, edges, today)
 

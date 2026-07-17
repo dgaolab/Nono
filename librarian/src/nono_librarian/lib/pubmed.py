@@ -19,6 +19,7 @@ philosophy as `LLMUnavailable` and the embeddings fallback.
 
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,6 +28,16 @@ import xml.etree.ElementTree as ET
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EUTILS_ESEARCH = EUTILS + "/esearch.fcgi"
 EUTILS_EFETCH = EUTILS + "/efetch.fcgi"
+
+# NCBI E-utilities enforces ~3 req/s without an API key (10 req/s with one).
+# `gather`/`finalize` fire several calls back-to-back in the same process with
+# no pacing of their own, which reliably trips a 429 even with zero external
+# contention. `_get` is the single seam every call goes through, so pacing +
+# a bounded 429 retry lives here rather than in each caller.
+_MIN_INTERVAL_NO_KEY = 0.4
+_MIN_INTERVAL_WITH_KEY = 0.12
+_MAX_429_RETRIES = 5
+_last_request_ts = [0.0]
 
 
 class PubMedUnavailable(RuntimeError):
@@ -37,13 +48,35 @@ def _api_key():
     return os.environ.get("NCBI_API_KEY") or None
 
 
+def _throttle():
+    min_interval = _MIN_INTERVAL_WITH_KEY if _api_key() else _MIN_INTERVAL_NO_KEY
+    wait = _last_request_ts[0] + min_interval - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    _last_request_ts[0] = time.monotonic()
+
+
 def _get(url, _opener, timeout=30):
-    """Fetch ``url`` and return the raw response bytes, or raise PubMedUnavailable."""
-    try:
-        with _opener(url, timeout=timeout) as resp:
-            return resp.read()
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        raise PubMedUnavailable(f"E-utilities request failed at {url}: {e}") from e
+    """Fetch ``url`` and return the raw response bytes, or raise PubMedUnavailable.
+
+    Paces requests to stay under NCBI's rate limit and retries a 429 a bounded
+    number of times with backoff before giving up.
+    """
+    last_err = None
+    for attempt in range(_MAX_429_RETRIES + 1):
+        _throttle()
+        try:
+            with _opener(url, timeout=timeout) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < _MAX_429_RETRIES:
+                last_err = e
+                time.sleep(2 ** attempt)
+                continue
+            raise PubMedUnavailable(f"E-utilities request failed at {url}: {e}") from e
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise PubMedUnavailable(f"E-utilities request failed at {url}: {e}") from e
+    raise PubMedUnavailable(f"E-utilities request failed at {url}: {last_err}") from last_err
 
 
 def esearch(query, *, retmax=100, mindate=None, maxdate=None, datetype="edat",
